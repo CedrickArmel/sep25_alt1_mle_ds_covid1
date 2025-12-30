@@ -1,0 +1,22 @@
+[project]
+name = "sep25-alt1-mle-ds-covid1"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "black>=25.12.0",
+    "flake8>=7.3.0",
+    "ipykernel>=7.1.0",
+    "ipywidgets>=8.1.8",
+    "isort>=7.0.0",
+    "mypy>=1.19.1",
+    "pre-commit>=4.5.1",
+]
+
+[tool.black]
+line-length = 88
+
+[tool.isort]
+profile = "black"
