@@ -2,7 +2,15 @@
 name = "sep25-alt1-mle-ds-covid1"
 version = "0.1.0"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    "joblib>=1.5.3",
+    "kaggle>=1.7.4.5",
+    "opencv-python>=4.12.0.88",
+    "openpyxl>=3.1.5",
+    "pandas>=2.3.3",
+    "scikit-image>=0.25.2",
+    "tqdm>=4.67.1",
+]
 
 [dependency-groups]
 dev = [
@@ -13,6 +21,7 @@ dev = [
     "isort>=7.0.0",
     "mypy>=1.19.1",
     "pre-commit>=4.5.1",
+    "seaborn>=0.13.2",
 ]
 
 [tool.black]
