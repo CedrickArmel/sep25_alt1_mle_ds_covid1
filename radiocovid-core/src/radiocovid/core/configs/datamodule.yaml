@@ -1,0 +1,32 @@
+datamodule:
+  _target_: radiocovid.core.DataModule
+
+  dataset:
+    _partial_: true
+    _target_: radiocovid.core.RadioCovidDataset
+    root: ??
+
+  train_loader:
+    _target_: torch.utils.data.DataLoader
+    batch_size: 25
+    persistent_workers: true
+    pin_memory: false
+    num_workers: 2
+    shuffle: true
+    drop_last: true
+    prefetch_factor: 2
+
+  test_size: 0.2
+  val_size: 0.2
+
+  eval_loader:
+    _target_: torch.utils.data.DataLoader
+    batch_size: 25
+    persistent_workers: true
+    pin_memory: false
+    num_workers: 2
+    shuffle: true
+    drop_last: true
+    prefetch_factor: 2
+
+  seed: "${seed}"
