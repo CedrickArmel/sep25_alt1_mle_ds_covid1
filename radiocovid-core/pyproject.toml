@@ -1,0 +1,67 @@
+[build-system]
+build-backend = "uv_build"
+requires = ["uv_build>=0.9.28,<0.10.0"]
+
+[dependency-groups]
+dev = [
+    "jupyter>=1.0.0,<2.0.0",
+    "ipykernel>=7.1.0",
+    "ipywidgets>=8.1.8",
+    "seaborn>=0.13.2",
+]
+lint = [
+    "black>=25.12.0",
+    "flake8>=7.3.0",
+    "isort>=7.0.0",
+    "pre-commit>=4.5.1",
+]
+typing = ["mypy>=1.19.1"]
+test = []
+
+[project]
+name = "radiocovid-core"
+version = "0.1.0"
+requires-python = ">=3.10,<3.11"
+dependencies = [
+    "hydra-core>=1.3.2",
+    "lightning==2.5.1.post0",
+    "torch~=2.6.0",
+    "tqdm>=4.67.1",
+    "torchmetrics>=1.7.4",
+    "torchinfo>=1.8.0",
+    "python-dotenv>=1.1.1",
+    "wandb>=0.21.0",
+    "numpy>=1.26.4",
+    "tensorboardx>=2.6.4",
+    "tensorboard>=2.20.0",
+    "hydra-optuna-sweeper>=1.2.0",
+    "hydra-colorlog>=1.2.0",
+    "opencv-python>=4.12.0.88",
+    "openpyxl>=3.1.5",
+    "scikit-image>=0.25.2",
+    "torchvision>=0.21.0",
+]
+
+[project.optional-dependencies]
+xla = ["libtpu==0.0.7.1", "torch-xla~=2.6.0"]
+etl = ["radiocovid-etl"]
+
+[tool.black]
+line-length = 88
+
+[tool.isort]
+profile = "black"
+
+[tool.uv.build-backend]
+namespace = true
+module-name = "radiocovid.core"
+
+[[tool.uv.index]]
+name = "libtpu-wheels"
+url = "https://storage.googleapis.com/libtpu-wheels/index.html"
+explicit = true
+format = "flat"
+
+[tool.uv.sources]
+radiocovid-etl = { workspace = true }
+libtpu = { index = "libtpu-wheels" }
