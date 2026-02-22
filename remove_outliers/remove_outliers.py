@@ -1,6 +1,27 @@
-import numpy as np
+# MIT License
+#
+# Copyright (c) 2025 @CedrickArmel, @samarita22, @TaxelleT & @Yeyecodes
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
 import cv2
-from skimage.feature import graycomatrix, graycoprops
+import numpy as np
 from scipy.stats import entropy
 from skimage.feature import graycomatrix, graycoprops
 
@@ -8,91 +29,90 @@ from skimage.feature import graycomatrix, graycoprops
 def lung_out_of_frame(mask):
     """
     Détecte si un poumon touche les bords de l'image.
-    
+
     Args:
         mask: Masque binaire (numpy array)
-    
+
     Returns:
         bool: True si un poumon touche les bords
     """
     mask_binary = (mask > 0).astype(np.uint8)
-    
+
     num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(
         mask_binary, connectivity=8
     )
-    
+
     # Besoin d'au moins 2 poumons + background
     if num_labels < 3:
         return False
-    
+
     # Récupérer les 2 plus grandes composantes (les poumons)
     areas = stats[1:, cv2.CC_STAT_AREA]
     largest_indices = np.argsort(areas)[-2:] + 1
-    
+
     # Vérifier si l'un des poumons touche les bords
     for idx in largest_indices:
-        component_mask = (labels == idx)
-        
+        component_mask = labels == idx
+
         # Vérifier les 4 bords
         if (
-            np.any(component_mask[0, :]) or      # Bord haut
-            np.any(component_mask[-1, :]) or     # Bord bas
-            np.any(component_mask[:, 0]) or      # Bord gauche
-            np.any(component_mask[:, -1])        # Bord droit
+            np.any(component_mask[0, :])  # Bord haut
+            or np.any(component_mask[-1, :])  # Bord bas
+            or np.any(component_mask[:, 0])  # Bord gauche
+            or np.any(component_mask[:, -1])  # Bord droit
         ):
             return True
-    
+
     return False
 
 
 def compute_asymmetry(mask):
     """
     Calcule l'asymétrie entre les deux poumons.
-    
+
     Args:
         mask: Masque binaire
-    
+
     Returns:
         float: Ratio d'asymétrie entre 0 et 1
     """
     _, binary = cv2.threshold(mask, 0, 255, cv2.THRESH_BINARY)
     num_labels, labels = cv2.connectedComponents(binary)
-    
+
     # Calculer l'aire de chaque composante
     areas = {}
     for label in range(1, num_labels):
         areas[label] = np.sum(labels == label)
-    
+
     # Prendre les 2 plus grandes (les poumons)
     lung_labels = sorted(areas, key=areas.get, reverse=True)[:2]
-    
+
     if len(lung_labels) < 2:
         return 1.0  # Asymétrie maximale si < 2 poumons
-    
+
     area_1 = areas[lung_labels[0]]
     area_2 = areas[lung_labels[1]]
-    
-    return abs(area_1 - area_2) / (area_1 + area_2)
 
+    return abs(area_1 - area_2) / (area_1 + area_2)
 
 
 def get_valid_indices_iqr(values):
     """
     Filtre les outliers avec la méthode IQR.
-    
+
     Args:
         values: Array numpy de valeurs
-    
+
     Returns:
         Array d'indices valides
     """
     q1 = np.percentile(values, 25)
     q3 = np.percentile(values, 75)
     iqr = q3 - q1
-    
+
     lower = q1 - 1.5 * iqr
     upper = q3 + 1.5 * iqr
-    
+
     return np.where((values >= lower) & (values <= upper))[0]
 
 
@@ -114,7 +134,9 @@ def prepare_lung_roi(image, mask, size=(256, 256)):
     return lung
 
 
-def extract_texture_features_glcm(lung: np.ndarray,features: list,distances: list[int],angles: np.ndarray):
+def extract_texture_features_glcm(
+    lung: np.ndarray, features: list, distances: list[int], angles: np.ndarray
+):
     """Extrait les features de texture à partir de la zone poumon uniquement
     Args:
         lung (np.ndarray): image du poumon
@@ -144,8 +166,8 @@ def extract_texture_features_glcm(lung: np.ndarray,features: list,distances: lis
     feature_values = []
 
     for ft in features:
-         props = graycoprops(glcm, prop=ft)
-         feature_values.append(props.mean())
+        props = graycoprops(glcm, prop=ft)
+        feature_values.append(props.mean())
 
     # Mean / std / entropy sur pixels poumons uniquement
     mean_val = np.mean(pixels)
@@ -157,6 +179,7 @@ def extract_texture_features_glcm(lung: np.ndarray,features: list,distances: lis
     feature_values.extend([mean_val, std_val, entropy_val])
 
     return np.array(feature_values)
+
 
 def filter_iqr_multidimensional(feature_matrix):
 
@@ -173,9 +196,7 @@ def filter_iqr_multidimensional(feature_matrix):
         lower = Q1 - 1.5 * IQR
         upper = Q3 + 1.5 * IQR
 
-        valid_col = np.where(
-            (values >= lower) & (values <= upper)
-        )[0]
+        valid_col = np.where((values >= lower) & (values <= upper))[0]
 
         valid_indices = np.intersect1d(valid_indices, valid_col)
 
@@ -205,8 +226,7 @@ def remove_outliers(images_dict, masks_dict):
 
         # 1️ Filtre cadre
         valid_frame = [
-            i for i, mask in enumerate(masks_list)
-            if not lung_out_of_frame(mask)
+            i for i, mask in enumerate(masks_list) if not lung_out_of_frame(mask)
         ]
 
         if len(valid_frame) == 0:
@@ -214,16 +234,11 @@ def remove_outliers(images_dict, masks_dict):
             continue
 
         # 2️ Filtre asymétrie
-        asym_values = np.array([
-            compute_asymmetry(masks_list[i])
-            for i in valid_frame
-        ])
+        asym_values = np.array([compute_asymmetry(masks_list[i]) for i in valid_frame])
 
         valid_asym = get_valid_indices_iqr(asym_values)
 
-        valid_after_asym = [
-            valid_frame[i] for i in valid_asym
-        ]
+        valid_after_asym = [valid_frame[i] for i in valid_asym]
 
         if len(valid_after_asym) == 0:
             valid_indices_dict[classe] = []
@@ -234,10 +249,7 @@ def remove_outliers(images_dict, masks_dict):
 
         for i in valid_after_asym:
 
-            lung = prepare_lung_roi(
-                images_list[i],
-                masks_list[i]
-            )
+            lung = prepare_lung_roi(images_list[i], masks_list[i])
 
             feat = extract_texture_features_glcm(
                 lung,
@@ -257,9 +269,7 @@ def remove_outliers(images_dict, masks_dict):
 
         valid_texture = filter_iqr_multidimensional(features)
 
-        final_indices = [
-            valid_after_asym[i] for i in valid_texture
-        ]
+        final_indices = [valid_after_asym[i] for i in valid_texture]
 
         valid_indices_dict[classe] = final_indices
 
