@@ -1,8 +1,0 @@
-optimizer:
-  _partial_: true
-  lr: 1e-3
-  foreach: null
-  differentiable: false
-  fused: null
-  maximize: false
-  weight_decay: 0
