@@ -27,8 +27,7 @@ dependencies = ["radiocovid-core"]
 [project.optional-dependencies]
 xla = ["radiocovid-core[xla]"]
 etl = ["radiocovid-etl"]
-app = ["radiocovid-app"]
-all = ["radiocovid-etl", "radiocovid-app"]
+all = ["radiocovid-etl"]
 
 [tool.black]
 line-length = 88
@@ -40,8 +39,8 @@ profile = "black"
 namespace = true
 
 [tool.uv.workspace]
-members = [
-    "radiocovid-core",
-    "radiocovid-etl",
-    "radiocovid-app",
-]
+members = ["radiocovid-core", "radiocovid-etl"]
+
+[tool.uv.sources]
+radiocovid-core = { workspace = true }
+radiocovid-etl = { workspace = true }

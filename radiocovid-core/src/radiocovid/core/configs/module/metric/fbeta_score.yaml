@@ -3,10 +3,10 @@
 # https://lightning.ai/docs/torchmetrics/stable/classification/f1_score.html
 
 metric:
-  _target_: torchmetrics.MulticlassFBetaScore
-  beta: 1
-  task: multiclass
-  num_classes: ??
+  _partial_: true
+  _target_: torchmetrics.classification.MulticlassFBetaScore
+  beta: 1.0
+  num_classes: ???
   average: macro
   multidim_average: global
   top_k: 1

@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+# TODO: Fine tune the loss function to deal with loader output
+
 import warnings
 from collections.abc import Sequence
 from typing import Optional
