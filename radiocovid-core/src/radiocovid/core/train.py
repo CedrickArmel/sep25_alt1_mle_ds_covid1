@@ -25,11 +25,12 @@
 from typing import Any, Dict, List, Optional, Tuple
 
 import hydra
+from dotenv import load_dotenv
 from lightning import Callback, LightningDataModule, LightningModule, Trainer
 from lightning.pytorch.loggers import Logger
 from omegaconf import DictConfig
 
-from .utils import (
+from radiocovid.core.utils import (
     RankedLogger,
     extras,
     get_metric_value,
@@ -38,6 +39,8 @@ from .utils import (
     log_hyperparameters,
     task_wrapper,
 )
+
+load_dotenv()
 
 log = RankedLogger(__name__, rank_zero_only=True)
 
@@ -57,7 +60,6 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     if det := cfg.get("determinism"):
         hydra.utils.call(det)
 
-    # TODO: define and call transform
     log.info(f"Instantiating datamodule <{cfg.datamodule._target_}>")
     datamodule: LightningDataModule = hydra.utils.instantiate(cfg.datamodule)
 

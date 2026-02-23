@@ -20,7 +20,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from functools import partial
 from typing import List
 
 import hydra
@@ -28,7 +27,7 @@ from lightning import Callback
 from lightning.pytorch.loggers import Logger
 from omegaconf import DictConfig
 from torch.optim import Optimizer
-from torch.optim.lr_scheduler import LRScheduler
+from torch.optim.lr_scheduler import SequentialLR
 
 from .pylogger import RankedLogger
 
@@ -80,27 +79,11 @@ def instantiate_loggers(logger_cfg: DictConfig) -> List[Logger]:
     return logger
 
 
-def instantiate_seq_scheduler(optimizer: Optimizer, seq_cfg: DictConfig):
-    seq_cfg.schedulers = [
-        hydra.utils.instantiate(cfg, optimizer=optimizer) for cfg in seq_cfg.schedulers
-    ]
-    return hydra.utils.instantiate(seq_cfg, optimizer=optimizer)
-
-
-def instantiate_scheduler(scheduler_cfg: DictConfig) -> partial[LRScheduler]:
-    """Instantiates scheduler from config.
-
-    :param scheduler_cfg: A DictConfig object containing scheduler configurations.
-    :return: A list of instantiated loggers.
-    """
-
-    if not scheduler_cfg:
-        KeyError("No scheduler configs found!")
-
-    if not isinstance(scheduler_cfg, DictConfig):
-        raise TypeError("Scheduler config must be a DictConfig!")
-
-    if scheduler_cfg._target_ not in ["torch.optim.lr_scheduler.SequentialLR"]:
-        return hydra.utils.instantiate(scheduler_cfg)
-    else:
-        return partial(instantiate_seq_scheduler, seq_cfg=scheduler_cfg)
+def sequential_scheduler(
+    optimizer: Optimizer, schedulers: list, milestones: list
+) -> SequentialLR:
+    """Instantiates SequentialLR from config."""
+    schedulers_list = [scheduler(optimizer=optimizer) for scheduler in schedulers]
+    return SequentialLR(
+        schedulers=schedulers_list, milestones=milestones, optimizer=optimizer
+    )

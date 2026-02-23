@@ -23,7 +23,7 @@
 from .instantiators import (
     instantiate_callbacks,
     instantiate_loggers,
-    instantiate_scheduler,
+    sequential_scheduler,
 )
 from .logging_utils import log_hyperparameters
 from .pylogger import RankedLogger
@@ -52,7 +52,7 @@ __all__ = [
     "print_config_tree",
     "instantiate_callbacks",
     "instantiate_loggers",
-    "instantiate_scheduler",
+    "sequential_scheduler",
     "log_hyperparameters",
     "enforce_tags",
     "set_seed",

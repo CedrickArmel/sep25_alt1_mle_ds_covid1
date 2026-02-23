@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+# TODO: Add Captum GradCam
+
 import os
 from functools import partial
 from typing import Any
@@ -148,7 +150,7 @@ class LModule(L.LightningModule):
                 if self.priors is not None:
                     with torch.no_grad():
                         self.trainer.model.net.classifier[-1].bias.copy_(-torch.log(self.priors))  # type: ignore[union-attr, operator, index]
-            self.net = torch.compile(self.net)  # type: ignore[assignment]
+            # self.net = torch.compile(self.net)  # type: ignore[assignment]
 
     def on_fit_start(self) -> "None":
         """Called at the very beginning of fit."""
@@ -203,6 +205,7 @@ class LModule(L.LightningModule):
             prog_bar=True,
             sync_dist=True,
         )
+        # TODO: GRadCam
         self.output.append(
             torch.cat(  # type: ignore[call-overload]
                 [batch["id"].cpu(), logits.softmax(1).cpu(), batch["target"].cpu()],
@@ -297,8 +300,8 @@ class LModule(L.LightningModule):
                     sync_on_compute=self.val_score.sync_on_compute,
                 )
         else:
-            self.val_score = self.partial_metric()
-            self.test_score = self.partial_metric()
+            self.val_score = self.partial_metric(process_group=None)
+            self.test_score = self.partial_metric(process_group=None)
             self.best_val_score = MaxMetric(
                 compute_on_cpu=self.val_score.compute_on_cpu,
                 sync_on_compute=self.val_score.sync_on_compute,

@@ -1,5 +1,8 @@
 # @package _global_
 
+# TODO: Add sweeper to expermient config
+# TODO: Explore how to leverage hydra.sweeper.study_name
+
 defaults:
   - override /hydra/sweeper: optuna
 # here we define Optuna hyperparameter search
@@ -19,6 +22,6 @@ hydra: # docs: https://hydra.cc/docs/next/plugins/optuna_sweeper
     sampler: # docs: https://optuna.readthedocs.io/en/stable/reference/samplers.html
       _target_: optuna.samplers.TPESampler
       seed: ${seed}
-      n_startup_trials: 10 # number of random sampling runs before optimization starts
+      n_startup_trials: 1 # number of random sampling runs before optimization starts
     # define hyperparameter search space
     params: ???
