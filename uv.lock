@@ -3036,6 +3036,7 @@ dependencies = [
 
 [package.optional-dependencies]
 all = [
+    { name = "radiocovid-core" },
     { name = "radiocovid-etl" },
 ]
 etl = [
@@ -3065,6 +3066,7 @@ typing = [
 [package.metadata]
 requires-dist = [
     { name = "radiocovid-core", editable = "radiocovid-core" },
+    { name = "radiocovid-core", marker = "extra == 'all'", editable = "radiocovid-core" },
     { name = "radiocovid-core", extras = ["xla"], marker = "extra == 'xla'", editable = "radiocovid-core" },
     { name = "radiocovid-etl", marker = "extra == 'all'", editable = "radiocovid-etl" },
     { name = "radiocovid-etl", marker = "extra == 'etl'", editable = "radiocovid-etl" },
