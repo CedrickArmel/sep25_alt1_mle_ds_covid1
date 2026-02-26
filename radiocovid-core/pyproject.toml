@@ -48,6 +48,9 @@ dependencies = [
 xla = ["libtpu==0.0.7.1", "torch-xla~=2.6.0"]
 etl = ["radiocovid-etl"]
 
+[project.scripts]
+radiocovid-train = "radiocovid.core:train"
+
 [tool.black]
 line-length = 88
 

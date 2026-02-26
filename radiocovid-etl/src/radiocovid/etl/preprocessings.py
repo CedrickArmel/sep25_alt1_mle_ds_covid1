@@ -237,7 +237,7 @@ def remove_outliers(
     r = Parallel(n_jobs=n_jobs, verbose=verbose)(
         delayed(lung_out_of_frame)(msk) for _, msk in images
     )
-    valid_frame = [item for i, item in enumerate(images) if r[i] is not False]
+    valid_frame = [item for i, item in enumerate(images) if r[i] is False]
     if len(valid_frame) == 0:
         return valid_frame
 

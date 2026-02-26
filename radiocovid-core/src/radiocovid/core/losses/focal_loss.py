@@ -23,7 +23,6 @@
 # TODO: Fine tune the loss function to deal with loader output
 
 import warnings
-from collections.abc import Sequence
 from typing import Optional
 
 import torch
@@ -33,81 +32,68 @@ import torch.nn.functional as F
 class FocalLoss(torch.nn.Module):
     def __init__(
         self,
-        to_onehot_y: bool = False,
+        weight: list | None = None,
+        alpha: float = 1.0,
         gamma: float = 2.0,
-        alpha: float | Sequence[float] | None = None,
         reduction: str = "none",
-        use_softmax: bool = False,
-    ) -> None:
+        to_onehot_y: bool = False,
+        use_softmax: bool = True,
+    ):
         super().__init__()
-
-        if reduction not in ["mean", "sum", "none"]:
-            raise ValueError(
-                f'Unsupported reduction: {reduction}, available options are ["mean", "sum", "none"].'
-            )
         self.reduction = reduction
-        self.to_onehot_y = to_onehot_y
+        self.weight = weight
         self.gamma = gamma
-        self.use_softmax = use_softmax
-
-        if alpha is not None:
-            if alpha < 0.0 or min(alpha) < 0.0:  # type: ignore[operator,arg-type]
-                raise ValueError(
-                    "the value/values of the `alpha` should be no less than 0."
-                )
-
         self.alpha = alpha
+        self.use_softmax = use_softmax
+        self.to_onehot_y = to_onehot_y
 
-    def forward(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-            input: the shape should be BN, where N is the number of classes.
-                The input should be the original logits since it will be transformed by
-                a sigmoid/softmax in the forward function.
-            target: the shape should be BN or B1, where N is the number of classes.
+    def forward(self, input: torch.Tensor, target: torch.Tensor):
 
-        Raises:
-            ValueError: When input and target (after one hot transform if set)
-                have different shapes.
-            ValueError: When ``self.weight`` is a sequence and the length is not equal to the
-                number of classes.
-        """
+        C: int = input.shape[1] if input.ndim > 1 else 1
 
         if self.to_onehot_y:
-            if target.shape[1] == input.shape[1]:
-                warnings.warn(
-                    "Target and Input have same size, `to_onehot_y=True` ignored."
-                )
-            elif target.shape[1] == 1:
-                target = F.one_hot(target.squeeze(1), num_classes=input.shape[1])
+            if C == 1:
+                warnings.warn("single channel prediction, `to_onehot_y=True` ignored.")
             else:
-                raise ValueError(
-                    f"Ground truth is {target.shape} with dim != 1. Ensure that Ground tructh dim 1 = 1 or Pred's dim 1."
-                )
+                if target.ndim > 1:
+                    target = target.squeeze(1)
+                target = F.one_hot(target, num_classes=C)
 
         if target.shape != input.shape:
             raise ValueError(
                 f"ground truth has different shape ({target.shape}) from input ({input.shape})"
             )
-        device = input.device
+
         loss: Optional[torch.Tensor] = None
         input = input.float()
         target = target.float()
-        alpha = None
-        if self.alpha is not None:
-            alpha = (
-                torch.tensor(self.alpha).to(device)
-                if isinstance(self.alpha, (list, tuple))
-                else self.alpha
-            )
+        if self.use_softmax:
+            loss = softmax_focal_loss(input, target, self.gamma, self.alpha)
+        else:
+            loss = sigmoid_focal_loss(input, target, self.gamma, self.alpha)
 
-        loss = softmax_focal_loss(input, target, self.gamma, alpha)  # type: ignore[arg-type]
+        weight = (
+            torch.tensor(self.weight) if self.weight is not None else torch.ones(C)
+        ).to(input.device)
+
+        if weight.ndim == 0:
+            weight = weight.repeat(C)
+        elif weight.shape[0] != C:
+            raise ValueError
+
+        weight = weight.view([1, C] + [1] * (loss.ndim - 2))
+
+        loss *= weight
+
+        if loss.ndim >= 3:
+            loss = loss.mean(dim=list(range(2, target.ndim)))
 
         loss = loss.mean(dim=0)
+
         if self.reduction == "sum":
-            loss = loss.sum()
+            return loss.sum()
         elif self.reduction == "mean":
-            loss = loss.mean()
+            return loss.mean()
         elif self.reduction == "none":
             pass
         return loss
@@ -117,7 +103,7 @@ def softmax_focal_loss(
     input: "torch.Tensor",
     target: "torch.Tensor",
     gamma: "float" = 2.0,
-    alpha: "float | torch.Tensor | None" = None,
+    alpha: "float | None" = None,
 ) -> "torch.Tensor":
     """
     FL(pt) = -alpha * (1 - pt)**gamma * log(pt)
@@ -125,12 +111,35 @@ def softmax_focal_loss(
     where p_i = exp(s_i) / sum_j exp(s_j), t is the target (ground truth) class, and
     s_j is the unnormalized score for class j.
     """
+
     input_ls: "torch.Tensor" = input.log_softmax(1)
-    num_classes: "int" = target.shape[1]
     loss: "torch.Tensor" = -(1 - input_ls.exp()).pow(gamma) * input_ls * target
-    if alpha is not None:
-        if isinstance(alpha, torch.Tensor):
-            if alpha.numel() != num_classes:
-                raise ValueError("")
+
+    if alpha:
         loss *= alpha
+
+    return loss
+
+
+def sigmoid_focal_loss(
+    input: "torch.Tensor",
+    target: "torch.Tensor",
+    gamma: "float" = 2.0,
+    alpha: "float | None" = None,
+) -> "torch.Tensor":
+    """
+    FL(pt) = -alpha * (1 - pt)**gamma * log(pt)
+
+    where p = sigmoid(x), pt = p if label is 1 or 1 - p if label is 0
+    """
+    loss: torch.Tensor = F.binary_cross_entropy_with_logits(
+        input=input, target=target, reduction="none"
+    )
+    invprobs: "torch.Tensor" = F.logsigmoid(
+        -input * (target * 2 - 1)
+    )  # reduced chance of overflow
+    loss = (invprobs * gamma).exp() * loss
+    if alpha is not None:
+        alpha_factor: "torch.Tensor" = target * alpha + (1 - target) * (1 - alpha)
+        loss = alpha_factor * loss
     return loss

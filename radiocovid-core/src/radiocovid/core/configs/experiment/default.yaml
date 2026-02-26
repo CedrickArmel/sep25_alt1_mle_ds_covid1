@@ -35,6 +35,8 @@ datamodule:
     transform:
       _target_: torchvision.transforms.Compose
       transforms:
+        - _target_: torchvision.transforms.Grayscale
+          num_output_channels: 3
         - _target_: torchvision.transforms.Resize
           size: 256
     loader:
@@ -93,6 +95,7 @@ module:
         eta_min: 5e-6
     milestones:
       - 200
+  priors: [0.505, 0.495]
 
   optimizer:
     lr: 1e-5
