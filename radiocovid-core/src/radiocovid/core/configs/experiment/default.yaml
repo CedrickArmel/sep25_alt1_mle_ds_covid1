@@ -20,14 +20,45 @@ callbacks:
     mode: max
     save_last: True
     auto_insert_metric_name: False
-
   early_stopping:
     monitor: ${optimized_metric}
     patience: 100
     mode: max
-
   model_summary:
     max_depth: -1
+
+loggers:
+  wandb:
+    save_dir: ${paths.output_dir}/wandb # Path where data is saved
+    offline: False # Run offline (data can be streamed later to wandb servers)
+    id: null # pass correct id to resume experiment!
+    anonymous: null # enable anonymous logging
+    project: radiocovid # The name of the project to which this run will belong. WANDB_PROJECT will be used as a fallback.
+    log_model: True # Log checkpoints created by ModelCheckpoint. latest and best aliases are automatically set.
+    entity: yebouetc # set to name of your wandb team
+  tensorboard:
+    save_dir: ${paths.output_dir}/tensorboard/
+
+module:
+  scheduler:
+    schedulers:
+      - _target_: torch.optim.lr_scheduler.LinearLR
+        _partial_: true
+        start_factor: 5e-1
+        total_iters: 200
+      - _target_: torch.optim.lr_scheduler.CosineAnnealingWarmRestarts
+        _partial_: true
+        T_0: 64
+        T_mult: 2
+        eta_min: 5e-6
+    milestones:
+      - 200
+  priors: [0.505, 0.495]
+  optimizer:
+    lr: 1e-5
+    weight_decay: 0
+  metric:
+    num_classes: 2
 
 datamodule:
   dataset:
@@ -70,39 +101,20 @@ datamodule:
         mean: [120]
         std: [60]
   train_loader:
+    batch_size: 25
     num_workers: 10
     prefetch_factor: 64
+    persistent_workers: true
   eval_loader:
+    batch_size: 25
     num_workers: 2
     prefetch_factor: 32
+    persistent_workers: true
   test_size: 0.2
   val_size: 0.2
   class_retriever:
     _partial_: true
     _target_: radiocovid.core.data.get_label_from_sample
-
-module:
-  scheduler:
-    schedulers:
-      - _target_: torch.optim.lr_scheduler.LinearLR
-        _partial_: true
-        start_factor: 5e-1
-        total_iters: 200
-      - _target_: torch.optim.lr_scheduler.CosineAnnealingWarmRestarts
-        _partial_: true
-        T_0: 64
-        T_mult: 2
-        eta_min: 5e-6
-    milestones:
-      - 200
-  priors: [0.505, 0.495]
-
-  optimizer:
-    lr: 1e-5
-    weight_decay: 0
-
-  metric:
-    num_classes: 2
 
 trainer:
   gradient_clip_val: 10
