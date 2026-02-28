@@ -34,7 +34,7 @@ from .pylogger import RankedLogger
 log = RankedLogger(__name__, rank_zero_only=True)
 
 
-def instantiate_callbacks(callbacks_cfg: DictConfig) -> List[Callback]:
+def instantiate_callbacks(callbacks_cfg: DictConfig) -> List[Callback] | None:
     """Instantiates callbacks from config.
 
     :param callbacks_cfg: A DictConfig object containing callback configurations.
@@ -44,7 +44,7 @@ def instantiate_callbacks(callbacks_cfg: DictConfig) -> List[Callback]:
 
     if not callbacks_cfg:
         log.warning("No callback configs found! Skipping..")
-        return
+        return None
 
     if not isinstance(callbacks_cfg, DictConfig):
         raise TypeError("Callbacks config must be a DictConfig!")
@@ -57,7 +57,7 @@ def instantiate_callbacks(callbacks_cfg: DictConfig) -> List[Callback]:
     return callbacks
 
 
-def instantiate_loggers(logger_cfg: DictConfig) -> List[Logger]:
+def instantiate_loggers(logger_cfg: DictConfig) -> List[Logger] | None:
     """Instantiates loggers from config.
 
     :param logger_cfg: A DictConfig object containing logger configurations.
@@ -67,7 +67,7 @@ def instantiate_loggers(logger_cfg: DictConfig) -> List[Logger]:
 
     if not logger_cfg:
         log.warning("No logger configs found! Skipping...")
-        return
+        return None
 
     if not isinstance(logger_cfg, DictConfig):
         raise TypeError("Logger config must be a DictConfig!")

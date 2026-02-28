@@ -22,6 +22,7 @@
 
 # TODO: Add Captum GradCam
 
+import copy
 import os
 from functools import partial
 from typing import Any
@@ -54,7 +55,13 @@ class LModule(L.LightningModule):
         self.loss = loss
         self.partial_optimizer = optimizer
         self.trainable_layers = trainable_layers
-        self.partial_metric = metric
+        self.val_score = copy.deepcopy(metric)
+        self.test_score = copy.deepcopy(metric)
+        self.best_val_score = MaxMetric(
+            process_group=metric.process_group,
+            compute_on_cpu=metric.compute_on_cpu,
+            sync_on_compute=metric.sync_on_compute,
+        )
         self.partial_scheduler = scheduler
         self.priors = torch.tensor(priors) if priors is not None else priors
 
@@ -299,23 +306,6 @@ class LModule(L.LightningModule):
             param.requires_grad = trainable
 
     def _shared_start(self):
-        if torch.distributed.is_initialized():
-            if not hasattr(self, "gloo_group"):
-                self.gloo_group = torch.distributed.new_group(backend="gloo")
-                self.val_score = self.partial_metric(process_group=self.gloo_group)
-                self.test_score = self.partial_metric(process_group=self.gloo_group)
-                self.best_val_score = MaxMetric(
-                    process_group=self.gloo_group,
-                    compute_on_cpu=self.val_score.compute_on_cpu,
-                    sync_on_compute=self.val_score.sync_on_compute,
-                )
-        else:
-            self.val_score = self.partial_metric(process_group=None)
-            self.test_score = self.partial_metric(process_group=None)
-            self.best_val_score = MaxMetric(
-                compute_on_cpu=self.val_score.compute_on_cpu,
-                sync_on_compute=self.val_score.sync_on_compute,
-            )
         self.val_score.reset()
         self.test_score.reset()
         self.best_val_score.reset()

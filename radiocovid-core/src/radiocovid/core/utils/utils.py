@@ -262,3 +262,18 @@ def set_seed(
         torch.use_deterministic_algorithms(
             mode=use_deterministic_algorithms, warn_only=warn_only
         )  # Sets whether PyTorch operations must use “deterministic” algorithms
+
+
+def get_process_group():
+    if not torch.distributed.is_initialized():
+        return None
+    device_type = torch.device("cuda" if torch.cuda.is_available() else "cpu").type
+    if device_type == "cuda":
+        backend = "nccl"
+        log.info("Instanciating a NCCL backend...")
+    elif device_type == "cpu":
+        backend = "gloo"
+        log.info("Instanciating a GLOO backend...")
+    else:
+        return None  # TPU/XLA or unsupported
+    return torch.distributed.new_group(backend=backend)
