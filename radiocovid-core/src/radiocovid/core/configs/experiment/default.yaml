@@ -1,0 +1,146 @@
+#@package _global_
+
+defaults:
+  - /module: default
+  - /module/loss: focal_loss
+  - /module/scheduler: sequential
+  - /module/metric: fbeta_score
+  - /module/optimizer: adamw
+  - /datamodule
+  - /trainer
+  - /strategy: auto
+  - /loggers: multiple
+  - /callbacks: multiple
+
+callbacks:
+  model_checkpoint:
+    dirpath: ${paths.output_dir}/checkpoints
+    filename: e{epoch:03d}_s{step:06d}_{train_loss:.2e}_{val_loss:.2e}_{score:.2e}
+    monitor: ${optimized_metric}
+    mode: max
+    save_last: True
+    auto_insert_metric_name: False
+  early_stopping:
+    monitor: ${optimized_metric}
+    patience: 100
+    mode: max
+  model_summary:
+    max_depth: -1
+
+loggers:
+  wandb:
+    save_dir: ${paths.output_dir}/wandb # Path where data is saved
+    offline: False # Run offline (data can be streamed later to wandb servers)
+    id: null # pass correct id to resume experiment!
+    anonymous: null # enable anonymous logging
+    project: radiocovid # The name of the project to which this run will belong. WANDB_PROJECT will be used as a fallback.
+    log_model: True # Log checkpoints created by ModelCheckpoint. latest and best aliases are automatically set.
+    entity: yebouetc # set to name of your wandb team
+  tensorboard:
+    save_dir: ${paths.output_dir}/tensorboard/
+
+module:
+  scheduler:
+    schedulers:
+      - _target_: torch.optim.lr_scheduler.LinearLR
+        _partial_: true
+        start_factor: 5e-1
+        total_iters: 200
+      - _target_: torch.optim.lr_scheduler.CosineAnnealingWarmRestarts
+        _partial_: true
+        T_0: 64
+        T_mult: 2
+        eta_min: 5e-6
+    milestones:
+      - 200
+  priors: [0.5004, 0.4996]
+  optimizer:
+    lr: 1e-5
+    weight_decay: 0
+  metric:
+    num_classes: 2
+  loss:
+    to_onehot_y: true
+
+datamodule:
+  dataset:
+    root: ???
+    transform:
+      _target_: torchvision.transforms.Compose
+      transforms:
+        - _target_: torchvision.transforms.Grayscale
+          num_output_channels: 3
+        - _target_: torchvision.transforms.Resize
+          size: 256
+    loader:
+      _partial_: true
+      _target_: torchvision.datasets.folder.default_loader
+    extensions: ["png"]
+  train_transform:
+    _target_: torchvision.transforms.Compose
+    transforms:
+      - _target_: torchvision.transforms.RandomApply
+        transforms:
+          - _target_: torchvision.transforms.RandomResizedCrop
+            size: 256
+            scale: [0.9, 1.1]
+        p: 0.1
+      - _target_: torchvision.transforms.RandomApply
+        transforms:
+          - _target_: torchvision.transforms.ColorJitter
+            brightness: 0.1
+            contrast: 0.2
+        p: 0.1
+      - _target_: torchvision.transforms.ToTensor
+      - _target_: torchvision.transforms.Normalize
+        mean: [128]
+        std: [65]
+  eval_transform:
+    _target_: torchvision.transforms.Compose
+    transforms:
+      - _target_: torchvision.transforms.ToTensor
+      - _target_: torchvision.transforms.Normalize
+        mean: [128]
+        std: [65]
+  train_loader:
+    batch_size: 25
+    num_workers: 10
+    prefetch_factor: 64
+    persistent_workers: true
+    # pin_memory: false
+    # shuffle: false
+    # drop_last: false
+  eval_loader:
+    batch_size: 25
+    num_workers: 2
+    prefetch_factor: 32
+    persistent_workers: true
+    # pin_memory: false
+    # shuffle: false
+    # drop_last: false
+  test_size: 0.2
+  val_size: 0.2
+  class_retriever:
+    _partial_: true
+    _target_: radiocovid.core.data.get_label_from_sample
+
+trainer:
+  gradient_clip_val: 10
+  check_val_every_n_epoch: 100
+  gradient_clip_algorithm: norm
+
+optimized_metric: val_score
+
+determinism:
+  _target_: radiocovid.core.utils.set_seed
+  seed: ${seed}
+  cudnn_backend: false
+  use_deterministic_algorithms: false
+  warn_only: true
+
+seed: 4294967295
+tags:
+  - dev
+  - ${stage}
+train: true
+test: true

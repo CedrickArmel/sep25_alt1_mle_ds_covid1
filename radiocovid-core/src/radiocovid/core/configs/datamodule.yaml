@@ -1,0 +1,16 @@
+datamodule:
+  _target_: radiocovid.core.RadioCovidDataModule
+
+  dataset:
+    _target_: radiocovid.core.RadioCovidDataset
+
+  train_loader:
+    _partial_: true
+    _target_: torch.utils.data.DataLoader
+    batch_size: ???
+
+  eval_loader:
+    _partial_: true
+    _target_: torch.utils.data.DataLoader
+    batch_size: ???
+  seed: "${seed}"

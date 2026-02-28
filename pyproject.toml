@@ -1,0 +1,46 @@
+[build-system]
+build-backend = "uv_build"
+requires = ["uv_build>=0.9.28,<0.10.0"]
+
+[dependency-groups]
+dev = [
+    "jupyter>=1.0.0,<2.0.0",
+    "ipykernel>=7.1.0",
+    "ipywidgets>=8.1.8",
+    "seaborn>=0.13.2",
+]
+lint = [
+    "black>=25.12.0",
+    "flake8>=7.3.0",
+    "isort>=7.0.0",
+    "pre-commit>=4.5.1",
+]
+typing = ["mypy>=1.19.1"]
+test = []
+
+[project]
+name = "radiocovid"
+version = "0.1.0"
+requires-python = ">=3.10,<3.11"
+dependencies = ["radiocovid-core"]
+
+[project.optional-dependencies]
+xla = ["radiocovid-core[xla]"]
+etl = ["radiocovid-etl"]
+all = ["radiocovid-core", "radiocovid-etl"]
+
+[tool.black]
+line-length = 88
+
+[tool.isort]
+profile = "black"
+
+[tool.uv.build-backend]
+namespace = true
+
+[tool.uv.workspace]
+members = ["radiocovid-core", "radiocovid-etl"]
+
+[tool.uv.sources]
+radiocovid-core = { workspace = true }
+radiocovid-etl = { workspace = true }

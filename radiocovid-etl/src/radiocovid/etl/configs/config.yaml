@@ -1,0 +1,17 @@
+data_dir: ??
+folders: ??
+clean:
+  dmax: ??
+  n_jobs: -1
+  resize:
+    - 256
+    - 256
+  verbose: 1
+  output: ??
+  features: ["contrast"]
+
+symlink:
+  manifest_path: ??
+  dst_dir: ??
+  keep_origin_classes: false
+  classes: { "COVID": 1, "Lung_Opacity": 1, "Normal": 0, "Viral Pneumonia": 1 }

@@ -1,0 +1,14 @@
+# @package _global_
+
+defaults:
+  - paths
+  - extras
+  - hydra: default
+  - tuner: null
+  - experiment: default
+  - debug: null
+  - profiler: null
+  - _self_
+
+stage: train # train, eval
+ckpt_path: null

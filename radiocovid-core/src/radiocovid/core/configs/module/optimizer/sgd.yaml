@@ -1,0 +1,13 @@
+# @package module
+
+# https://docs.pytorch.org/docs/stable/generated/torch.optim.SGD.html
+
+defaults:
+  - base_optimizer
+  - _self_
+
+optimizer:
+  _target_: torch.optim.SGD
+  momentum: 0
+  dampening: 0
+  nesterov: false

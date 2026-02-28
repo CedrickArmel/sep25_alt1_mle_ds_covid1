@@ -1,0 +1,22 @@
+# @package module
+
+# https://lightning.ai/docs/torchmetrics/stable/classification/f1_score.html
+
+metric:
+  _target_: torchmetrics.classification.MulticlassFBetaScore
+  beta: 1.0
+  num_classes: ???
+  average: macro
+  multidim_average: global
+  top_k: 1
+  ignore_index: null
+  validate_args: true
+  zero_division: 0.0
+  compute_on_cpu: true
+  dist_sync_on_step: false
+  dist_sync_fn: null
+  distributed_available_fn: null
+  sync_on_compute: true
+  compute_with_cache: true
+  process_group:
+    _target_: radiocovid.core.utils.get_process_group

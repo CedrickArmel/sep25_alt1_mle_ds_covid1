@@ -78,6 +78,8 @@ target/
 
 # Jupyter Notebook
 .ipynb_checkpoints
+remove_outlier_test.ipynb
+
 
 # IPython
 profile_default/
@@ -164,4 +166,9 @@ cython_debug/
 .vscode/
 
 # Data folder
-data/
+**/data/
+**/logs/
+**/outputs/
+**/logs/
+
+!radiocovid-core/**/data
