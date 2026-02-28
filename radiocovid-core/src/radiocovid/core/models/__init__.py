@@ -12,7 +12,10 @@ from torch.optim.lr_scheduler import LRScheduler
 from torchmetrics import MaxMetric, Metric
 from torchmetrics.utilities import dim_zero_cat
 
-from .nets import VanillaCNN
+from radiocovid.core.utils import RankedLogger
+
+
+log = RankedLogger(__name__, rank_zero_only=True)
 
 
 class LModule(L.LightningModule):
@@ -174,6 +177,8 @@ class LModule(L.LightningModule):
     def test_step(self, batch: "dict[str, Any]", batch_idx: "int"):
         with torch.no_grad():
             loss, logits = self._shared_eval_step(batch)
+        
+        log.info(f"""Id size : {batch["id"].shape}, Preds size : {logits.softmax(1).shape}, Target size : {batch["target"].shape}""")
         self.test_score(logits.argmax(1), batch["target"])
         self.log_dict(
             dict(test_loss=loss, test_score=self.test_score),
@@ -186,7 +191,7 @@ class LModule(L.LightningModule):
         # TODO: GRadCam
         self.output.append(
             torch.cat(  # type: ignore[call-overload]
-                [batch["id"].cpu(), logits.softmax(1).cpu(), batch["target"].cpu()],
+                [batch["id"].cpu().reshape(-1, 1), logits.softmax(1).cpu(), batch["target"].cpu().reshape(-1, 1)],
                 axis=1,
             )
         )
@@ -246,12 +251,13 @@ class LModule(L.LightningModule):
             sync_dist=True,
         )
         output: "torch.Tensor" = dim_zero_cat(x=self.output)
-        torch.save(
-            output,
-            os.path.join(
-                self.trainer.log_dir, f"preds-rank{self.trainer.global_rank}.pt"  # type: ignore[arg-type]
-            ),
-        )
+        if self.trainer.log_dir:
+            torch.save(
+                output,
+                os.path.join(
+                    self.trainer.log_dir, f"preds-rank{self.trainer.global_rank}.pt"  # type: ignore[arg-type]
+                ),
+            )
         self.test_score.reset()
 
     def _model_step(self, batch: dict[str, Any]) -> "dict[str, Any]":

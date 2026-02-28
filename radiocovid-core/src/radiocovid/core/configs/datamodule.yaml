@@ -8,21 +8,9 @@ datamodule:
     _partial_: true
     _target_: torch.utils.data.DataLoader
     batch_size: ???
-    persistent_workers: true
-    pin_memory: false
-    num_workers: ???
-    shuffle: false
-    drop_last: false
-    prefetch_factor: ???
 
   eval_loader:
     _partial_: true
     _target_: torch.utils.data.DataLoader
     batch_size: ???
-    persistent_workers: ???
-    pin_memory: false
-    num_workers: ???
-    shuffle: false
-    drop_last: false
-    prefetch_factor: ???
   seed: "${seed}"

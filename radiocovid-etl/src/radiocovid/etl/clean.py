@@ -47,6 +47,7 @@ def clean(cfg: DictConfig):
             log.info(f"Cleaning completed successfully. No data removed from {rep}.")
         log.info(f"The remaining size is {len(valid_images)}.")
     log.info("Exporting manifest!")
+    Path(cfg.clean.output).parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(records).to_parquet(cfg.clean.output, index=False)
     log.info("Cleaning completed successfully !")
 
