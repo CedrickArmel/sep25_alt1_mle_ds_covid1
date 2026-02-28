@@ -1,3 +1,25 @@
+# MIT License
+#
+# Copyright (c) 2025 @CedrickArmel, @samarita22, @TaxelleT & @Yeyecodes
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
 import os
 import random
 import warnings
@@ -240,3 +262,18 @@ def set_seed(
         torch.use_deterministic_algorithms(
             mode=use_deterministic_algorithms, warn_only=warn_only
         )  # Sets whether PyTorch operations must use “deterministic” algorithms
+
+
+def get_process_group():
+    if not torch.distributed.is_initialized():
+        return None
+    device_type = torch.device("cuda" if torch.cuda.is_available() else "cpu").type
+    if device_type == "cuda":
+        backend = "nccl"
+        log.info("Instanciating a NCCL backend...")
+    elif device_type == "cpu":
+        backend = "gloo"
+        log.info("Instanciating a GLOO backend...")
+    else:
+        return None  # TPU/XLA or unsupported
+    return torch.distributed.new_group(backend=backend)

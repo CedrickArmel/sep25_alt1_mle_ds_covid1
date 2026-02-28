@@ -1,5 +1,28 @@
+# MIT License
+#
+# Copyright (c) 2025 @CedrickArmel, @samarita22, @TaxelleT & @Yeyecodes
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
 # TODO: Add Captum GradCam
 
+import copy
 import os
 from functools import partial
 from typing import Any
@@ -13,7 +36,6 @@ from torchmetrics import MaxMetric, Metric
 from torchmetrics.utilities import dim_zero_cat
 
 from radiocovid.core.utils import RankedLogger
-
 
 log = RankedLogger(__name__, rank_zero_only=True)
 
@@ -34,7 +56,13 @@ class LModule(L.LightningModule):
         self.loss = loss
         self.partial_optimizer = optimizer
         self.trainable_layers = trainable_layers
-        self.partial_metric = metric
+        self.val_score = copy.deepcopy(metric)
+        self.test_score = copy.deepcopy(metric)
+        self.best_val_score = MaxMetric(
+            process_group=metric.process_group,
+            compute_on_cpu=metric.compute_on_cpu,
+            sync_on_compute=metric.sync_on_compute,
+        )
         self.partial_scheduler = scheduler
         self.priors = torch.tensor(priors) if priors is not None else priors
 
@@ -177,8 +205,10 @@ class LModule(L.LightningModule):
     def test_step(self, batch: "dict[str, Any]", batch_idx: "int"):
         with torch.no_grad():
             loss, logits = self._shared_eval_step(batch)
-        
-        log.info(f"""Id size : {batch["id"].shape}, Preds size : {logits.softmax(1).shape}, Target size : {batch["target"].shape}""")
+
+        log.info(
+            f"""Id size : {batch["id"].shape}, Preds size : {logits.softmax(1).shape}, Target size : {batch["target"].shape}"""
+        )
         self.test_score(logits.argmax(1), batch["target"])
         self.log_dict(
             dict(test_loss=loss, test_score=self.test_score),
@@ -191,7 +221,11 @@ class LModule(L.LightningModule):
         # TODO: GRadCam
         self.output.append(
             torch.cat(  # type: ignore[call-overload]
-                [batch["id"].cpu().reshape(-1, 1), logits.softmax(1).cpu(), batch["target"].cpu().reshape(-1, 1)],
+                [
+                    batch["id"].cpu().reshape(-1, 1),
+                    logits.softmax(1).cpu(),
+                    batch["target"].cpu().reshape(-1, 1),
+                ],
                 axis=1,
             )
         )
@@ -273,23 +307,6 @@ class LModule(L.LightningModule):
             param.requires_grad = trainable
 
     def _shared_start(self):
-        if torch.distributed.is_initialized():
-            if not hasattr(self, "gloo_group"):
-                self.gloo_group = torch.distributed.new_group(backend="gloo")
-                self.val_score = self.partial_metric(process_group=self.gloo_group)
-                self.test_score = self.partial_metric(process_group=self.gloo_group)
-                self.best_val_score = MaxMetric(
-                    process_group=self.gloo_group,
-                    compute_on_cpu=self.val_score.compute_on_cpu,
-                    sync_on_compute=self.val_score.sync_on_compute,
-                )
-        else:
-            self.val_score = self.partial_metric(process_group=None)
-            self.test_score = self.partial_metric(process_group=None)
-            self.best_val_score = MaxMetric(
-                compute_on_cpu=self.val_score.compute_on_cpu,
-                sync_on_compute=self.val_score.sync_on_compute,
-            )
         self.val_score.reset()
         self.test_score.reset()
         self.best_val_score.reset()
