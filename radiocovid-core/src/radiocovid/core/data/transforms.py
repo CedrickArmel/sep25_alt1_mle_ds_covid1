@@ -20,18 +20,19 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-# TODO: Build the Vanilla model
+from typing import Any
 
-from torch import nn
+import torch
+from torchvision.transforms.v2 import Transform
 
 
-class VanillaCNN(nn.Module):
-    def __init__(
-        self,
-    ):
-        super(VanillaCNN, self).__init__()
+class Squeeze(Transform):
+    """Convert images or videos to RGB (if they are already not RGB)."""
 
-    def forward(
-        self,
-    ):
-        return
+    def __init__(self, dim: None | int = None):
+        super().__init__()
+        self.dim = dim
+
+    def transform(self, inpt: Any, params: dict[str, Any]) -> Any:
+        if isinstance(inpt, torch.Tensor):
+            return inpt.squeeze() if not self.dim else inpt.squeeze(dim=self.dim)

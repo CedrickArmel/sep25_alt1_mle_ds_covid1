@@ -1,6 +1,6 @@
 optimizer:
   _partial_: true
-  lr: 1e-3
+  lr: ???
   foreach: null
   differentiable: false
   fused: null

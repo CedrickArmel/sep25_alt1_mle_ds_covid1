@@ -20,28 +20,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-# MIT License
-#
-# Copyright (c) 2026 @CedrickArmel, @TaxelleT, @Yeyecodes & @samarita22
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
-
 # TODO: Add Captum GradCam
 
 import os
@@ -50,13 +28,14 @@ from typing import Any
 
 import lightning.pytorch as L
 import torch
+from radiocovid.core.utils import RankedLogger
 from torch.nn import Module
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
 from torchmetrics import MaxMetric, Metric
 from torchmetrics.utilities import dim_zero_cat
 
-from .nets import VanillaCNN
+log = RankedLogger(__name__, rank_zero_only=True)
 
 
 class LModule(L.LightningModule):
@@ -218,6 +197,10 @@ class LModule(L.LightningModule):
     def test_step(self, batch: "dict[str, Any]", batch_idx: "int"):
         with torch.no_grad():
             loss, logits = self._shared_eval_step(batch)
+
+        log.info(
+            f"""Id size : {batch["id"].shape}, Preds size : {logits.softmax(1).shape}, Target size : {batch["target"].shape}"""
+        )
         self.test_score(logits.argmax(1), batch["target"])
         self.log_dict(
             dict(test_loss=loss, test_score=self.test_score),
@@ -230,7 +213,11 @@ class LModule(L.LightningModule):
         # TODO: GRadCam
         self.output.append(
             torch.cat(  # type: ignore[call-overload]
-                [batch["id"].cpu(), logits.softmax(1).cpu(), batch["target"].cpu()],
+                [
+                    batch["id"].cpu().reshape(-1, 1),
+                    logits.softmax(1).cpu(),
+                    batch["target"].cpu().reshape(-1, 1),
+                ],
                 axis=1,
             )
         )
@@ -290,12 +277,13 @@ class LModule(L.LightningModule):
             sync_dist=True,
         )
         output: "torch.Tensor" = dim_zero_cat(x=self.output)
-        torch.save(
-            output,
-            os.path.join(
-                self.trainer.log_dir, f"preds-rank{self.trainer.global_rank}.pt"  # type: ignore[arg-type]
-            ),
-        )
+        if self.trainer.log_dir:
+            torch.save(
+                output,
+                os.path.join(
+                    self.trainer.log_dir, f"preds-rank{self.trainer.global_rank}.pt"  # type: ignore[arg-type]
+                ),
+            )
         self.test_score.reset()
 
     def _model_step(self, batch: dict[str, Any]) -> "dict[str, Any]":
