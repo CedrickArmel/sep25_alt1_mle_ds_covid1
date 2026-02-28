@@ -29,13 +29,12 @@ from typing import Any
 
 import lightning.pytorch as L
 import torch
+from radiocovid.core.utils import RankedLogger
 from torch.nn import Module
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
 from torchmetrics import MaxMetric, Metric
 from torchmetrics.utilities import dim_zero_cat
-
-from radiocovid.core.utils import RankedLogger
 
 log = RankedLogger(__name__, rank_zero_only=True)
 

@@ -29,7 +29,6 @@ from dotenv import load_dotenv
 from lightning import Callback, LightningDataModule, LightningModule, Trainer
 from lightning.pytorch.loggers import Logger
 from omegaconf import DictConfig
-
 from radiocovid.core.utils import (
     RankedLogger,
     extras,
