@@ -1,7 +1,0 @@
-# @package _global_
-
-trainer:
-  accelerator: tpu
-  strategy: auto
-  devices: auto
-  precision: 16-true

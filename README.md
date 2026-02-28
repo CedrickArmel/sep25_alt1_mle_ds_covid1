@@ -1,39 +1,3 @@
-# DESCRIPTION
-
-# INSTALLATION
-
-This project depends on `uv` pyhton librairie dependency management.
-
-1. Please visit [uv offficial website](https://docs.astral.sh/uv/getting-started/installation/) to see how to install it for your OS.
-
-2. Clone this project
-
-3. Sync the `uv.lock` file with your virtual environnment. If no `venv` is activated, `uv` will create `.venv` in your current project.
-
-```shell
-uv sync
-```
-
-4. You then need to fetch the data locally from the project's Google Drive using `dvc`:
-
-```shell
-dvc fetch
-```
-
-If the GDrive haven't been shared with you, this will not work for you. If it has been shared with you and you are trying you first connection to it, you need to follow the steps described [here](https://doc.dvc.org/user-guide/data-management/remote-storage/google-drive#using-a-custom-google-cloud-project-recommended) before proceeding to the following.
-
-Once you have a `client_id` and a `client secret` run the following:
-
-```shell
-dvc remote modify --local data gdrive_client_id 'client-id'
-dvc remote modify --local data gdrive_client_secret 'client-secret'
-dvc fetch
-```
-
-1. That's it. Don't hesitate to read the documentations of [UV](https://docs.astral.sh/uv/getting-started) and [DVC](https://doc.dvc.org/user-guide) for advanced uages.
-
-# PROJECT ORGANIZATION
-
 Project Name
 ==============================
 

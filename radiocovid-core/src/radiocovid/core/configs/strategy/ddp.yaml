@@ -1,7 +1,0 @@
-# @package _global_
-
-trainer:
-  accelerator: gpu
-  strategy: ddp
-  devices: auto
-  precision: 16-mixed
