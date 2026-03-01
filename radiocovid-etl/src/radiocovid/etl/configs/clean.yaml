@@ -1,0 +1,10 @@
+data_dir: ???
+folders: ???
+dmax: ???
+n_jobs: -1
+resize:
+  - 256
+  - 256
+verbose: 1
+output: ???
+features: ["contrast"]

@@ -35,7 +35,7 @@ from .utils import Logger
 log = Logger(__name__)
 
 
-@hydra.main(version_base="1.3", config_path="configs", config_name="config")
+@hydra.main(version_base="1.3", config_path="configs", config_name="clean")
 def clean(cfg: DictConfig):
     data_dir = Path(cfg.data_dir)
     folders = cfg.folders
