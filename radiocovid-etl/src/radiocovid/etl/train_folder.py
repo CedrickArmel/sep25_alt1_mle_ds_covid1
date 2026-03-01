@@ -38,7 +38,7 @@ def create_symlink(label: str, src: str, dst: Path):
     dst_path.symlink_to(src_path)
 
 
-@hydra.main(version_base="1.3", config_path="configs", config_name="config")
+@hydra.main(version_base="1.3", config_path="configs", config_name="train-folder")
 def make_image_folder(cfg: DictConfig):
     manifest = pd.read_parquet(cfg.symlink.manifest_path)
     if not cfg.symlink.keep_origin_classes:
