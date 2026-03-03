@@ -1,7 +1,6 @@
 #@package _global_
 
 defaults:
-  - /module: default
   - /module/loss: focal_loss
   - /module/scheduler: constant
   - /module/metric: fbeta_score
@@ -41,22 +40,16 @@ loggers:
     save_dir: ${paths.output_dir}/tensorboard/
 
 module:
+  _target_: radiocovid.core.RadioCovidModule
   scheduler:
-    schedulers:
-      - _target_: torch.optim.lr_scheduler.LinearLR
-        _partial_: true
-        start_factor: 5e-5
-        total_iters: 200
-      - _target_: torch.optim.lr_scheduler.CosineAnnealingWarmRestarts
-        _partial_: true
-        T_0: 64
-        T_mult: 2
-        eta_min: 5e-10
-    milestones:
-      - 200
+    total_iters: 100000
+  net:
+    _target_: torchvision.models.resnet50
+    num_classes: 2
+  trainable_layers: { "layer4": null, "avgpool": null, "fc": null}
   priors: [0.5004, 0.4996]
   optimizer:
-    lr: 1e-5
+    lr: 1e-3
     weight_decay: 0
   metric:
     num_classes: 2
