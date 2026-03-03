@@ -46,16 +46,16 @@ def clean(cfg: DictConfig):
         log.info(f"Number of images in {rep} before cleaning : {len(imgs)}")
         images = list(zip(imgs, masks))
         angles = (np.pi / 4) * np.arange(0, 4)
-        dmax = list(range(1, cfg.clean.dmax))
+        dmax = list(range(1, cfg.dmax))
         log.info("Removing outliers...")
         valid_images = remove_outliers(
             images=images,
-            glcm_features=cfg.clean.features,
+            glcm_features=cfg.features,
             glcm_angles=angles,
             glcm_distances=dmax,
-            n_jobs=cfg.clean.n_jobs,
-            resize=cfg.clean.resize,
-            verbose=cfg.clean.verbose,
+            n_jobs=cfg.n_jobs,
+            resize=cfg.resize,
+            verbose=cfg.verbose,
         )
         records.extend(
             [
@@ -69,8 +69,8 @@ def clean(cfg: DictConfig):
             log.info(f"Cleaning completed successfully. No data removed from {rep}.")
         log.info(f"The remaining size is {len(valid_images)}.")
     log.info("Exporting manifest!")
-    Path(cfg.clean.output).parent.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame(records).to_parquet(cfg.clean.output, index=False)
+    Path(cfg.output).parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(records).to_parquet(cfg.output, index=False)
     log.info("Cleaning completed successfully !")
 
 
