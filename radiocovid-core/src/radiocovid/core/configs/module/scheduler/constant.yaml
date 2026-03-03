@@ -1,0 +1,9 @@
+
+# @package module
+
+scheduler:
+  _target_: torch.optim.lr_scheduler.ConstantLR
+  _partial_: true
+  factor: 0.333
+  total_iters: ???
+  last_epoch: -1

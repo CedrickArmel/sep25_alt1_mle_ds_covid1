@@ -1,7 +1,9 @@
-# @package _global_
+# @package callbacks
 
 defaults:
   - early_stopping
   - model_checkpoint
   - model_summary
   - rich_progress_bar
+  - lr_monitor
+  - exception_checkpoint
