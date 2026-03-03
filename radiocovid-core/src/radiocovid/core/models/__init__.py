@@ -29,12 +29,13 @@ from typing import Any
 
 import lightning.pytorch as L
 import torch
-from radiocovid.core.utils import RankedLogger
 from torch.nn import Module
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
 from torchmetrics import MaxMetric, Metric
 from torchmetrics.utilities import dim_zero_cat
+
+from radiocovid.core.utils import RankedLogger
 
 log = RankedLogger(__name__, rank_zero_only=True)
 
@@ -156,9 +157,7 @@ class LModule(L.LightningModule):
                 )
                 self.set_trainable()
                 if self.priors is not None:
-                    with torch.no_grad():
-                        self.trainer.model.net.classifier[-1].bias.copy_(-torch.log(self.priors))  # type: ignore[union-attr, operator, index]
-            # self.net = torch.compile(self.net)  # type: ignore[assignment]
+                    self._init_last_linear_bias_with_priors()
 
     def on_fit_start(self) -> "None":
         """Called at the very beginning of fit."""
@@ -204,10 +203,6 @@ class LModule(L.LightningModule):
     def test_step(self, batch: "dict[str, Any]", batch_idx: "int"):
         with torch.no_grad():
             loss, logits = self._shared_eval_step(batch)
-
-        log.info(
-            f"""Id size : {batch["id"].shape}, Preds size : {logits.softmax(1).shape}, Target size : {batch["target"].shape}"""
-        )
         self.test_score(logits.argmax(1), batch["target"])
         self.log_dict(
             dict(test_loss=loss, test_score=self.test_score),
@@ -274,9 +269,10 @@ class LModule(L.LightningModule):
         self.val_score.reset()
 
     def on_test_epoch_end(self) -> None:
+        test_score = self.test_score.compute()
         self.log(
             "test_score",
-            self.test_score,
+            test_score,
             on_step=False,
             on_epoch=True,
             logger=True,
@@ -304,6 +300,29 @@ class LModule(L.LightningModule):
     def _set_layer_trainable(self, layer: torch.nn.Module, trainable: bool = False):
         for param in layer.parameters():
             param.requires_grad = trainable
+
+    def _init_last_linear_bias_with_priors(self) -> torch.nn.Linear:
+        fc = None
+        fc_name = None
+        for (
+            name,
+            m,
+        ) in self.trainer.model.net.named_modules():  # recursive, in registration order
+            if isinstance(m, torch.nn.Linear) and m.bias is not None:
+                fc = m
+                fc_name = name
+        if fc is not None:
+            if self.priors.numel() != fc.bias.numel():  # type: ignore[union-attr]
+                raise ValueError(
+                    f"priors has {self.priors.numel()} elems but bias has {fc.bias.numel()} elems."  # type: ignore[union-attr]
+                )
+            with torch.no_grad():
+                fc.bias.copy_(-torch.log(self.priors))
+            log.info(
+                f"Initialized bias of last Linear layer {fc_name} with -log(priors)."
+            )
+        else:
+            log.warning("No nn.Linear layer with bias found in model.")
 
     def _shared_start(self):
         self.val_score.reset()
