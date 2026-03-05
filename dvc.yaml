@@ -1,0 +1,25 @@
+stages:
+  cleaning_full:
+    desc: >-
+      Removes outliers using all haralick features, lung out of frame and asymmetric
+    cmd: >-
+      radiocovid-clean data_dir=data/01_raw/COVID-19_Radiography_Dataset output=data/02_manifests/manifest_full_ft.parquet
+    deps:
+      - data/01_raw/COVID-19_Radiography_Dataset
+      - radiocovid-etl/src/radiocovid/etl/configs/clean.yaml
+  make_malade_sain_folder_full_ft:
+    desc: >-
+      Use the mapping in classes config as keep_origin_classes is False to create two new classes
+    cmd: >-
+      radiocovid-train-folder manifest_path=data/02_manifests/manifest_full_ft.parquet dst_dir=data/03_inputs
+    deps:
+      - data/02_manifests/manifest_full_ft.parquet
+      - radiocovid-etl/src/radiocovid/etl/configs/train-folder.yaml
+  overfit_ts_hpg_resnet50:
+    desc: >-
+      Performs HP tuning to find params likely to overfit train set, with resnet50, before using them
+      and apply a scheduler for fine-grained optimisation
+    cmd: radiocovid-train --multirun datamodule.dataset.root=data/03_inputs experiment=overfit_ts_hpg_resnet50
+    deps:
+      - radiocovid-core/src/radiocovid/core/configs/experiment/overfit_ts_hpg_resnet50.yaml
+      - data/03_inputs
