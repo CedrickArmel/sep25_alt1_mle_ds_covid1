@@ -1,0 +1,9 @@
+#@package _global_
+
+defaults:
+  - overfit_batch
+  - /module: regnety128gf
+  - _self_
+
+module:
+  trainable_layers: {"trunk_output.block4.block4-0.f.c": null, "avgpool": null, "fc": null}

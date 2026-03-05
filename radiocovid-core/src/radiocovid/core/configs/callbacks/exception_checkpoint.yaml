@@ -5,5 +5,5 @@
 
 exception_checkpoint:
   _target_: lightning.pytorch.callbacks.OnExceptionCheckpoint
-  dirpath: null
-  filename: null
+  dirpath: ???
+  filename: ???
