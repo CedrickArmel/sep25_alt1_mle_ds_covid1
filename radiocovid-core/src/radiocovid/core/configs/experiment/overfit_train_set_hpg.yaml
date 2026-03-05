@@ -1,0 +1,158 @@
+#@package _global_
+
+defaults:
+  - /tuner: optuna
+  - /module/loss: focal_loss
+  - /module/scheduler: constant
+  - /module/metric: fbeta_score
+  - /module/optimizer: adamw
+  - /datamodule
+  - /trainer
+  - /strategy: auto
+  - /loggers: all
+  - /callbacks: all
+  - _self_
+
+callbacks:
+  lr_monitor:
+    logging_interval: 1
+    log_momentum: false
+    log_weight_decay: false
+  model_summary:
+    max_depth: -1
+  early_stopping:
+    monitor: train_loss_epoch
+    min_delta: 0.001
+    patience: 1
+    verbose: False
+    mode: min
+    strict: false
+    check_finite: True 
+    stopping_threshold: 0.001 
+    check_on_train_epoch_end: true 
+    log_rank_zero_only: False 
+  exception_checkpoint:
+    dirpath: ${paths.output_dir}/checkpoints
+    filename: exception_checkpoint
+  model_checkpoint:
+    dirpath: ${paths.output_dir}/checkpoints
+    filename: e{epoch:03d}_s{step:06d}_{best_train_loss:.2e}
+    monitor: train_loss_step
+    save_last: true
+    save_top_k: 1
+    mode: min
+    every_n_train_steps: 200
+    save_on_train_epoch_end: true
+
+loggers:
+  wandb:
+    save_dir: ${paths.output_dir}/wandb # Path where data is saved
+    project: radiocovid # The name of the project to which this run will belong. WANDB_PROJECT will be used as a fallback.
+    log_model: true
+  tensorboard:
+    save_dir: ${paths.output_dir}/tensorboard/
+
+module:
+  scheduler:
+    total_iters: 100000
+  priors: [0.5004, 0.4996]
+  optimizer:
+    lr: 1e-3
+    weight_decay: 0
+  metric:
+    num_classes: 2
+  loss:
+    to_onehot_y: true
+
+datamodule:
+  dataset:
+    root: ???
+    transform:
+      _target_: torchvision.transforms.Compose
+      transforms:
+        - _target_: torchvision.transforms.Grayscale
+          num_output_channels: 3
+        - _target_: torchvision.transforms.Resize
+          size: 256
+    loader:
+      _partial_: true
+      _target_: torchvision.datasets.folder.default_loader
+    extensions: ["png"]
+  train_transform:
+    _target_: torchvision.transforms.Compose
+    transforms:
+      - _target_: torchvision.transforms.RandomApply
+        transforms:
+          - _target_: torchvision.transforms.RandomResizedCrop
+            size: 256
+            scale: [0.9, 1.1]
+        p: 0.0
+      - _target_: torchvision.transforms.RandomApply
+        transforms:
+          - _target_: torchvision.transforms.ColorJitter
+            brightness: 0.1
+            contrast: 0.2
+        p: 0.0
+      - _target_: torchvision.transforms.ToTensor
+      - _target_: torchvision.transforms.Normalize
+        mean: [128]
+        std: [65]
+  eval_transform:
+    _target_: torchvision.transforms.Compose
+    transforms:
+      - _target_: torchvision.transforms.ToTensor
+      - _target_: torchvision.transforms.Normalize
+        mean: [128]
+        std: [65]
+  train_loader:
+    batch_size: 8
+    num_workers: 2
+    prefetch_factor: 64
+    persistent_workers: true
+    shuffle: false
+  eval_loader:
+    batch_size: 8
+    num_workers: 2
+    prefetch_factor: 32
+    persistent_workers: true
+    shuffle: false
+  test_size: 0.2
+  val_size: 0.2
+  class_retriever:
+    _partial_: true
+    _target_: radiocovid.core.data.get_label_from_sample
+
+trainer:
+  max_epochs: 5
+  gradient_clip_val: 10
+  val_check_interval: 1.0
+  gradient_clip_algorithm: norm
+
+hydra:
+  sweeper:
+    direction: minimize
+    n_trials: 100
+    sampler:
+      n_startup_trials: 1 
+    params:
+      datamodule.train_loader.batch_size: range(4, 28, step=4)
+      module.optimizer.lr: tag(log, interval(1e-6, 1e-1))
+      module.loss.alpha: interval(0.2, 2.0)
+      module.loss.gamma: range(0, 5, step=1)
+
+optimized_metric: best_train_loss
+
+determinism:
+  _target_: radiocovid.core.utils.set_seed
+  seed: ${seed}
+  cudnn_backend: false
+  use_deterministic_algorithms: false
+  warn_only: true
+
+seed: 4294967295
+tags:
+  - overfit_ts
+  - ${stage}
+  - ${hydra.sweeper.study_name}
+train: true
+test: true

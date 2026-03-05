@@ -1,0 +1,13 @@
+#@package _global_
+
+defaults:
+  - overfit_train_set_hpg
+  - /module: resnet50
+  - _self_
+
+module:
+  trainable_layers: { "layer4": null, "avgpool": null, "fc": null}
+
+hydra:
+  sweeper:
+    study_name: resnet50_hpg_overfit_ts_${now:%Y-%m-%d}_${now:%H-%M-%S}
