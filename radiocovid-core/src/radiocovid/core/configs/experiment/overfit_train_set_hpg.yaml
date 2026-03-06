@@ -27,22 +27,12 @@ callbacks:
     verbose: False
     mode: min
     strict: false
-    check_finite: True 
-    stopping_threshold: 0.001 
-    check_on_train_epoch_end: true 
-    log_rank_zero_only: False 
-  exception_checkpoint:
-    dirpath: ${paths.output_dir}/checkpoints
-    filename: exception_checkpoint
-  model_checkpoint:
-    dirpath: ${paths.output_dir}/checkpoints
-    filename: e{epoch:03d}_s{step:06d}_{best_train_loss:.2e}
-    monitor: train_loss_step
-    save_last: true
-    save_top_k: 1
-    mode: min
-    every_n_train_steps: 200
-    save_on_train_epoch_end: true
+    check_finite: True
+    stopping_threshold: 0.001
+    check_on_train_epoch_end: true
+    log_rank_zero_only: False
+  exception_checkpoint: null
+  model_checkpoint: null
 
 loggers:
   wandb:
@@ -133,7 +123,7 @@ hydra:
     direction: minimize
     n_trials: 100
     sampler:
-      n_startup_trials: 1 
+      n_startup_trials: 1
     params:
       datamodule.train_loader.batch_size: range(4, 28, step=4)
       module.optimizer.lr: tag(log, interval(1e-6, 1e-1))
