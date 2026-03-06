@@ -2,7 +2,7 @@ SHELL:=/bin/bash
 
 UV_VERSION ?= 0.7.13
 PYTHON_VERSION ?= 3.10.16
-VENV ?= asrs
+VENV ?= covid
 PYENV_GIT_TAG ?= v2.6.3
 
 define GPUENVVARS
