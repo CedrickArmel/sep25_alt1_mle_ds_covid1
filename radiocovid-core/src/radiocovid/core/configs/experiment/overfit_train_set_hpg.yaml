@@ -1,7 +1,6 @@
 #@package _global_
 
 defaults:
-  - /tuner: optuna
   - /module/loss: focal_loss
   - /module/scheduler: constant
   - /module/metric: fbeta_score
@@ -11,11 +10,12 @@ defaults:
   - /strategy: auto
   - /loggers: all
   - /callbacks: all
+  - override /tuner: optuna
   - _self_
 
 callbacks:
   lr_monitor:
-    logging_interval: 1
+    logging_interval: step
     log_momentum: false
     log_weight_decay: false
   model_summary:
@@ -43,6 +43,8 @@ loggers:
     save_dir: ${paths.output_dir}/tensorboard/
 
 module:
+  net:
+    num_classes: 2
   scheduler:
     total_iters: 100000
   priors: [0.5004, 0.4996]
@@ -143,6 +145,5 @@ seed: 4294967295
 tags:
   - overfit_ts
   - ${stage}
-  - ${hydra.sweeper.study_name}
 train: true
 test: true
