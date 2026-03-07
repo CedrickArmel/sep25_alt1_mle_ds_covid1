@@ -22,7 +22,6 @@
 
 # TODO: Add Captum GradCam
 
-import copy
 import os
 from functools import partial
 from typing import Any
@@ -32,7 +31,7 @@ import torch
 from torch.nn import Module
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
-from torchmetrics import MaxMetric, Metric, MinMetric, MeanMetric
+from torchmetrics import MaxMetric, MeanMetric, Metric, MinMetric
 from torchmetrics.utilities import dim_zero_cat
 
 from radiocovid.core.utils import RankedLogger
@@ -45,33 +44,34 @@ class LModule(L.LightningModule):
         self,
         net: Module,
         loss: Module,
-        metric: Metric,
+        metric: partial[Metric],
         optimizer: partial[Optimizer],
         scheduler: partial[LRScheduler],
         trainable_layers: dict[str, list],
         priors: list[float] | None,
+        process_group: None | Any = None,
     ) -> None:
         super().__init__()
         self.net = net
         self.loss = loss
         self.partial_optimizer = optimizer
         self.trainable_layers = trainable_layers
-        self.val_score = copy.deepcopy(metric)
-        self.test_score = copy.deepcopy(metric)
+        self.val_score = metric(process_group=process_group)
+        self.test_score = metric(process_group=process_group)
         self.best_val_score = MaxMetric(
-            process_group=metric.process_group,
-            compute_on_cpu=metric.compute_on_cpu,
-            sync_on_compute=metric.sync_on_compute,
+            process_group=process_group,
+            compute_on_cpu=self.val_score.compute_on_cpu,
+            sync_on_compute=self.val_score.sync_on_compute,
         )
         self.train_loss = MeanMetric(
-            process_group=metric.process_group,
-            compute_on_cpu=metric.compute_on_cpu,
-            sync_on_compute=metric.sync_on_compute,
+            process_group=process_group,
+            compute_on_cpu=self.val_score.compute_on_cpu,
+            sync_on_compute=self.val_score.sync_on_compute,
         )
-        self.best_train_score = MinMetric(
-            process_group=metric.process_group,
-            compute_on_cpu=metric.compute_on_cpu,
-            sync_on_compute=metric.sync_on_compute,
+        self.best_train_loss = MinMetric(
+            process_group=process_group,
+            compute_on_cpu=self.val_score.compute_on_cpu,
+            sync_on_compute=self.val_score.sync_on_compute,
         )
         self.partial_scheduler = scheduler
         self.priors = torch.tensor(priors) if priors is not None else priors
@@ -257,7 +257,7 @@ class LModule(L.LightningModule):
             prog_bar=False,
             sync_dist=True,
         )
-    
+
     def on_train_epoch_end(self):
         self.best_train_loss.update(self.trainer.callback_metrics["train_loss_epoch"])
         self.log(
@@ -331,6 +331,8 @@ class LModule(L.LightningModule):
     def _shared_start(self):
         self.val_score.reset()
         self.test_score.reset()
+        self.train_loss.reset()
+        self.best_train_loss.reset()
         self.best_val_score.reset()
 
     def _shared_eval_step(self, batch: "dict[str, Any]"):

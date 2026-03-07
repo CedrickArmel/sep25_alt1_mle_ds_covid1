@@ -29,10 +29,12 @@ from dotenv import load_dotenv
 from lightning import Callback, LightningDataModule, LightningModule, Trainer
 from lightning.pytorch.loggers import Logger
 from omegaconf import DictConfig
+
 from radiocovid.core.utils import (
     RankedLogger,
     extras,
     get_metric_value,
+    get_process_group,
     instantiate_callbacks,
     instantiate_loggers,
     log_hyperparameters,
@@ -73,8 +75,10 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     log.info(f"Instantiating datamodule <{cfg.datamodule._target_}>")
     datamodule: LightningDataModule = hydra.utils.instantiate(cfg.datamodule)
 
+    pg = get_process_group()
+
     log.info(f"Instantiating model <{cfg.module._target_}>")
-    model: LightningModule = hydra.utils.instantiate(cfg.module)
+    model: LightningModule = hydra.utils.instantiate(cfg.module, process_group=pg)
 
     object_dict = {
         "cfg": cfg,
