@@ -75,10 +75,8 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     log.info(f"Instantiating datamodule <{cfg.datamodule._target_}>")
     datamodule: LightningDataModule = hydra.utils.instantiate(cfg.datamodule)
 
-    pg = get_process_group()
-
     log.info(f"Instantiating model <{cfg.module._target_}>")
-    model: LightningModule = hydra.utils.instantiate(cfg.module, process_group=pg)
+    model: LightningModule = hydra.utils.instantiate(cfg.module)
 
     object_dict = {
         "cfg": cfg,

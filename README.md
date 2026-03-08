@@ -13,7 +13,7 @@ This project depends on ùv` pyhton librairie dependency management.
 3. Sync the `uv.lock` file with your virtual environnment. If no `venv` is activated, `uv` will create `.venv` in your current project.
 
 ```shell
-uv sync --group dev
+uv sync --all-groups --extra all
 ```
 
 1. You then need to fetch the data locally from the project's Google Drive using `dvc`:
@@ -109,7 +109,8 @@ For experimentation, we recommand to create `experiment_name.yaml` config as an 
 1. clean and remove outliers
 
 ```shell
-radiocovid-clean data_dir=./data/raw_data 'folders=[COVID,Lung_Opacity,Normal,"Viral Pneumonia"]' \
+radiocovid-clean data_dir=$PROJECT_ROOT/data/raw_data \
+'folders=["COVID", "Lung_Opacity","Normal", "Viral Pneumonia"]' \
 clean.dmax=29 clean.output=./data/manifest.parquet \
 features: ["contrast"]
 ```
@@ -119,9 +120,9 @@ This considers the images in subfolders `["COVID","Lung_Opacity","Normal","Viral
 1. Make the training foler
 
 ```shell
-radiocovid-train-foldder symlink.manifest_path=./data/manifest.parquet \
-symlink.dst_dir=./data/train_folder \
-symlink.classes: { "COVID": 1, "Lung_Opacity": 1, "Normal": 0, "Viral Pneumonia": 1 }
+radiocovid-train-foldder manifest_path=./data/manifest.parquet \
+dst_dir=./data/train_folder \
+classes: { "COVID": 1, "Lung_Opacity": 1, "Normal": 0, "Viral Pneumonia": 1 }
 ```
 
 This creates symlinks of images using the path in the manifest and group them in subfolders of `./data/train_folder` according to the mapping in `symlink.classes`. if `symlink.classes` is `null` or None, the original folders are used.
