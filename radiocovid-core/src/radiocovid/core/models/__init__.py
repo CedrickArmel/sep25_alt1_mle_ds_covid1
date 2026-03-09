@@ -48,7 +48,7 @@ class LModule(L.LightningModule):
         optimizer: partial[Optimizer],
         scheduler: partial[LRScheduler],
         trainable_layers: dict[str, list],
-        priors: list[float] | None
+        priors: list[float] | None,
     ) -> None:
         super().__init__()
         self.net = net
