@@ -48,27 +48,23 @@ class LModule(L.LightningModule):
         scheduler: partial[LRScheduler],
         trainable_layers: dict[str, list],
         priors: list[float] | None,
-        process_group: None | Any = None,
     ) -> None:
         super().__init__()
         self.net = net
         self.loss = loss
         self.partial_optimizer = optimizer
         self.trainable_layers = trainable_layers
-        self.val_score = metric(process_group=process_group)
-        self.test_score = metric(process_group=process_group)
+        self.val_score = metric()
+        self.test_score = metric()
         self.best_val_score = MaxMetric(
-            process_group=process_group,
             compute_on_cpu=self.val_score.compute_on_cpu,
             sync_on_compute=self.val_score.sync_on_compute,
         )
         self.train_loss = MeanMetric(
-            process_group=process_group,
             compute_on_cpu=self.val_score.compute_on_cpu,
             sync_on_compute=self.val_score.sync_on_compute,
         )
         self.best_train_loss = MinMetric(
-            process_group=process_group,
             compute_on_cpu=self.val_score.compute_on_cpu,
             sync_on_compute=self.val_score.sync_on_compute,
         )
