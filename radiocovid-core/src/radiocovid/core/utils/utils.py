@@ -140,7 +140,7 @@ def get_metric_value(
     """
     if not metric_name:
         log.info("Metric name is None! Skipping metric value retrieval...")
-        return None
+        return 0
 
     if metric_name not in metric_dict:
         raise Exception(
