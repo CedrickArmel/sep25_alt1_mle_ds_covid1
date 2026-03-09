@@ -1,6 +1,6 @@
 # https://docs.pytorch.org/vision/main/models/generated/torchvision.models.vgg11.html
 
-_target_: radiocovid.core.RadioCovidModule  
+_target_: radiocovid.core.RadioCovidModule
 net:
   _target_: torchvision.models.vgg11
   dropout: 0.0
