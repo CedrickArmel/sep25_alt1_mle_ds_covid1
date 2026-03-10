@@ -64,8 +64,8 @@ module:
     weight_decay: 0
   metric:
     num_classes: 2
-  
- 
+
+
 
 datamodule:
   dataset:
