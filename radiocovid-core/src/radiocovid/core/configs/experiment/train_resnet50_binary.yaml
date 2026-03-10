@@ -21,13 +21,13 @@ callbacks:
     log_weight_decay: false
   early_stopping:
     monitor: val_score
-    min_delta: 0.01
+    min_delta: 0.0
     patience: 2
     verbose: False
     mode: max
     strict: false
     check_finite: True
-    divergence_threshold: 0.7
+    divergence_threshold: 0.5
     check_on_train_epoch_end: false
     log_rank_zero_only: False
   model_summary:
@@ -135,6 +135,7 @@ trainer:
   gradient_clip_val: 10
   val_check_interval: 1.0
   gradient_clip_algorithm: norm
+  enable_checkpointing: true
 
 optimized_metric: best_val_score
 
@@ -160,6 +161,7 @@ seed: 4294967295
 tags:
   - overfit_ts
   - resnet50_binary_hpt
+  - v2
   - ${stage}
 train: true
 test: true
