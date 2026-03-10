@@ -22,7 +22,6 @@
 
 # TODO: Add Captum GradCam
 
-import copy
 import os
 from functools import partial
 from typing import Any
@@ -33,7 +32,7 @@ from radiocovid.core.utils import RankedLogger
 from torch.nn import Module
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
-from torchmetrics import MaxMetric, Metric
+from torchmetrics import MaxMetric, MeanMetric, Metric, MinMetric
 from torchmetrics.utilities import dim_zero_cat
 
 log = RankedLogger(__name__, rank_zero_only=True)
@@ -44,7 +43,7 @@ class LModule(L.LightningModule):
         self,
         net: Module,
         loss: Module,
-        metric: Metric,
+        metric: partial[Metric],
         optimizer: partial[Optimizer],
         scheduler: partial[LRScheduler],
         trainable_layers: dict[str, list],
@@ -55,12 +54,19 @@ class LModule(L.LightningModule):
         self.loss = loss
         self.partial_optimizer = optimizer
         self.trainable_layers = trainable_layers
-        self.val_score = copy.deepcopy(metric)
-        self.test_score = copy.deepcopy(metric)
+        self.val_score = metric()
+        self.test_score = metric()
         self.best_val_score = MaxMetric(
-            process_group=metric.process_group,
-            compute_on_cpu=metric.compute_on_cpu,
-            sync_on_compute=metric.sync_on_compute,
+            compute_on_cpu=self.val_score.compute_on_cpu,
+            sync_on_compute=self.val_score.sync_on_compute,
+        )
+        self.train_loss = MeanMetric(
+            compute_on_cpu=self.val_score.compute_on_cpu,
+            sync_on_compute=self.val_score.sync_on_compute,
+        )
+        self.best_train_loss = MinMetric(
+            compute_on_cpu=self.val_score.compute_on_cpu,
+            sync_on_compute=self.val_score.sync_on_compute,
         )
         self.partial_scheduler = scheduler
         self.priors = torch.tensor(priors) if priors is not None else priors
@@ -156,9 +162,7 @@ class LModule(L.LightningModule):
                 )
                 self.set_trainable()
                 if self.priors is not None:
-                    with torch.no_grad():
-                        self.trainer.model.net.classifier[-1].bias.copy_(-torch.log(self.priors))  # type: ignore[union-attr, operator, index]
-            # self.net = torch.compile(self.net)  # type: ignore[assignment]
+                    self._init_last_linear_bias_with_priors()
 
     def on_fit_start(self) -> "None":
         """Called at the very beginning of fit."""
@@ -168,14 +172,18 @@ class LModule(L.LightningModule):
         self.output = []
         self._shared_start()
 
+    def on_train_epoch_start(self):
+        self.train_loss.reset()
+
     def training_step(
         self, batch: "dict[str, Any]", batch_idx: "int"
     ) -> "torch.Tensor":
         output_dict = self._model_step(batch)
         loss: "torch.Tensor" = output_dict["loss"]
+        self.train_loss.update(loss)
         self.log(
             "train_loss",
-            loss,
+            self.train_loss.compute(),
             on_step=True,
             on_epoch=True,
             logger=True,
@@ -190,7 +198,7 @@ class LModule(L.LightningModule):
         """Operates on a single batch of data from the validation set"""
         with torch.no_grad():
             loss, logits = self._shared_eval_step(batch)
-        self.val_score(logits.argmax(1), batch["target"])
+        self.val_score.update(logits.argmax(1), batch["target"])
         self.log_dict(
             dict(val_loss=loss, val_score=self.val_score),
             on_step=False,
@@ -204,11 +212,7 @@ class LModule(L.LightningModule):
     def test_step(self, batch: "dict[str, Any]", batch_idx: "int"):
         with torch.no_grad():
             loss, logits = self._shared_eval_step(batch)
-
-        log.info(
-            f"""Id size : {batch["id"].shape}, Preds size : {logits.softmax(1).shape}, Target size : {batch["target"].shape}"""
-        )
-        self.test_score(logits.argmax(1), batch["target"])
+        self.test_score.update(logits.argmax(1), batch["target"])
         self.log_dict(
             dict(test_loss=loss, test_score=self.test_score),
             on_step=False,
@@ -231,7 +235,7 @@ class LModule(L.LightningModule):
         return logits
 
     def on_train_batch_end(self, outputs, batch, batch_idx) -> "None":
-        params = [p for p in self.parameters() if p.grad is not None]
+        params = list(self.parameters())
         if len(params) == 0:
             total_norm = torch.tensor(0.0)
         else:
@@ -249,40 +253,32 @@ class LModule(L.LightningModule):
             sync_dist=True,
         )
 
+    def on_train_epoch_end(self):
+        self.best_train_loss.update(self.trainer.callback_metrics["train_loss_epoch"])
+        self.log(
+            "best_train_loss",
+            self.best_train_loss.compute(),
+            on_step=False,
+            on_epoch=True,
+            logger=True,
+            prog_bar=True,
+            sync_dist=True,
+        )
+
     def on_validation_epoch_end(self) -> "None":
         """Called after the epoch ends to agg preds and logging"""
-        val_score = self.val_score.compute()
-        self.best_val_score(val_score)
+        self.best_val_score.update(self.val_score.compute())
         self.log(
             "best_val_score",
-            self.best_val_score,
+            self.best_val_score.compute(),
             on_step=False,
             on_epoch=True,
             logger=True,
             prog_bar=True,
             sync_dist=True,
         )
-        self.log(
-            "val_score",
-            val_score,
-            on_step=False,
-            on_epoch=True,
-            logger=True,
-            prog_bar=True,
-            sync_dist=True,
-        )
-        self.val_score.reset()
 
     def on_test_epoch_end(self) -> None:
-        self.log(
-            "test_score",
-            self.test_score,
-            on_step=False,
-            on_epoch=True,
-            logger=True,
-            prog_bar=True,
-            sync_dist=True,
-        )
         output: "torch.Tensor" = dim_zero_cat(x=self.output)
         if self.trainer.log_dir:
             torch.save(
@@ -291,7 +287,6 @@ class LModule(L.LightningModule):
                     self.trainer.log_dir, f"preds-rank{self.trainer.global_rank}.pt"  # type: ignore[arg-type]
                 ),
             )
-        self.test_score.reset()
 
     def _model_step(self, batch: dict[str, Any]) -> "dict[str, Any]":
         logits = self(batch["input"])
@@ -305,9 +300,34 @@ class LModule(L.LightningModule):
         for param in layer.parameters():
             param.requires_grad = trainable
 
+    def _init_last_linear_bias_with_priors(self) -> torch.nn.Linear:
+        fc = None
+        fc_name = None
+        for (
+            name,
+            m,
+        ) in self.trainer.model.net.named_modules():  # recursive, in registration order
+            if isinstance(m, torch.nn.Linear) and m.bias is not None:
+                fc = m
+                fc_name = name
+        if fc is not None:
+            if self.priors.numel() != fc.bias.numel():  # type: ignore[union-attr]
+                raise ValueError(
+                    f"priors has {self.priors.numel()} elems but bias has {fc.bias.numel()} elems."  # type: ignore[union-attr]
+                )
+            with torch.no_grad():
+                fc.bias.copy_(-torch.log(self.priors))
+            log.info(
+                f"Initialized bias of last Linear layer {fc_name} with -log(priors)."
+            )
+        else:
+            log.warning("No nn.Linear layer with bias found in model.")
+
     def _shared_start(self):
         self.val_score.reset()
         self.test_score.reset()
+        self.train_loss.reset()
+        self.best_train_loss.reset()
         self.best_val_score.reset()
 
     def _shared_eval_step(self, batch: "dict[str, Any]"):

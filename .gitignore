@@ -170,5 +170,6 @@ cython_debug/
 **/logs/
 **/outputs/
 **/logs/
-
+**/multiruns/
 !radiocovid-core/**/data
+/data

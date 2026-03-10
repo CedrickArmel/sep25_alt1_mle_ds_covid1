@@ -1,7 +1,6 @@
 #@package _global_
 
 defaults:
-  - /module: default
   - /module/loss: focal_loss
   - /module/scheduler: constant
   - /module/metric: fbeta_score
@@ -11,49 +10,46 @@ defaults:
   - /strategy: auto
   - /loggers: all
   - /callbacks: all
+  - override /tuner: optuna
   - _self_
 
 callbacks:
-  model_checkpoint:
-    dirpath: ${paths.output_dir}/checkpoints
-    filename: e{epoch:03d}_s{step:06d}_{train_loss:.2e}_{val_loss:.2e}_{score:.2e}
-    monitor: ${optimized_metric}
-    mode: max
-    save_last: True
-    auto_insert_metric_name: False
-  early_stopping:
-    monitor: ${optimized_metric}
-    patience: 3
-    mode: max
+  lr_monitor:
+    logging_interval: step
+    log_momentum: false
+    log_weight_decay: false
   model_summary:
     max_depth: -1
+  early_stopping:
+    monitor: train_loss_epoch
+    min_delta: 0.001
+    patience: 1
+    verbose: False
+    mode: min
+    strict: false
+    check_finite: True
+    stopping_threshold: 0.001
+    check_on_train_epoch_end: true
+    log_rank_zero_only: False
+  exception_checkpoint: null
+  model_checkpoint: null
 
 loggers:
   wandb:
     save_dir: ${paths.output_dir}/wandb # Path where data is saved
     project: radiocovid # The name of the project to which this run will belong. WANDB_PROJECT will be used as a fallback.
-    log_model: True # Log checkpoints created by ModelCheckpoint. latest and best aliases are automatically set.
-    entity: yebouetc # set to name of your wandb team
+    log_model: true
   tensorboard:
     save_dir: ${paths.output_dir}/tensorboard/
 
 module:
+  net:
+    num_classes: 2
   scheduler:
-    schedulers:
-      - _target_: torch.optim.lr_scheduler.LinearLR
-        _partial_: true
-        start_factor: 5e-5
-        total_iters: 200
-      - _target_: torch.optim.lr_scheduler.CosineAnnealingWarmRestarts
-        _partial_: true
-        T_0: 64
-        T_mult: 2
-        eta_min: 5e-10
-    milestones:
-      - 200
+    total_iters: 100000
   priors: [0.5004, 0.4996]
   optimizer:
-    lr: 1e-5
+    lr: 1e-3
     weight_decay: 0
   metric:
     num_classes: 2
@@ -82,13 +78,13 @@ datamodule:
           - _target_: torchvision.transforms.RandomResizedCrop
             size: 256
             scale: [0.9, 1.1]
-        p: 0.1
+        p: 0.0
       - _target_: torchvision.transforms.RandomApply
         transforms:
           - _target_: torchvision.transforms.ColorJitter
             brightness: 0.1
             contrast: 0.2
-        p: 0.1
+        p: 0.0
       - _target_: torchvision.transforms.ToTensor
       - _target_: torchvision.transforms.Normalize
         mean: [128]
@@ -105,17 +101,13 @@ datamodule:
     num_workers: 2
     prefetch_factor: 64
     persistent_workers: true
-    # pin_memory: false
-    # shuffle: false
-    # drop_last: false
+    shuffle: false
   eval_loader:
     batch_size: 8
     num_workers: 2
     prefetch_factor: 32
     persistent_workers: true
-    # pin_memory: false
-    # shuffle: false
-    # drop_last: false
+    shuffle: false
   test_size: 0.2
   val_size: 0.2
   class_retriever:
@@ -123,11 +115,24 @@ datamodule:
     _target_: radiocovid.core.data.get_label_from_sample
 
 trainer:
+  max_epochs: 5
   gradient_clip_val: 10
   val_check_interval: 1.0
   gradient_clip_algorithm: norm
 
-optimized_metric: val_score
+hydra:
+  sweeper:
+    direction: minimize
+    n_trials: 100
+    sampler:
+      n_startup_trials: 1
+    params:
+      datamodule.train_loader.batch_size: range(4, 28, step=4)
+      module.optimizer.lr: tag(log, interval(1e-6, 1e-1))
+      module.loss.alpha: interval(0.2, 2.0)
+      module.loss.gamma: range(0, 5, step=1)
+
+optimized_metric: best_train_loss
 
 determinism:
   _target_: radiocovid.core.utils.set_seed
@@ -138,7 +143,7 @@ determinism:
 
 seed: 4294967295
 tags:
-  - dev
+  - overfit_ts
   - ${stage}
 train: true
 test: true

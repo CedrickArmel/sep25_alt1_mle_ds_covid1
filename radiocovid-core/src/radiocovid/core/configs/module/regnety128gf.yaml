@@ -1,0 +1,8 @@
+# https://docs.pytorch.org/vision/0.24/models/generated/torchvision.models.regnet_y_128gf.html#torchvision.models.regnet_y_128gf
+
+_target_: radiocovid.core.RadioCovidModule
+net:
+  _target_: torchvision.models.regnet_y_128gf
+  num_classes: ???
+trainable_layers: null
+priors: null

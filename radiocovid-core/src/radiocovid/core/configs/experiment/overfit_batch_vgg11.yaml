@@ -1,0 +1,9 @@
+#@package _global_
+
+defaults:
+  - overfit_batch
+  - /module: vgg11
+  - _self_
+
+module:
+  trainable_layers: { "classifier": [-4, -3, -2, -1]}

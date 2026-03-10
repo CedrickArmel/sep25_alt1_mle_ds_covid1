@@ -25,9 +25,11 @@ requires-python = ">=3.10,<3.11"
 dependencies = ["radiocovid-core"]
 
 [project.optional-dependencies]
-xla = ["radiocovid-core[xla]"]
-etl = ["radiocovid-etl"]
 all = ["radiocovid-core", "radiocovid-etl"]
+all_xla = ["radiocovid-core[xla]", "radiocovid-etl"]
+etl = ["radiocovid-etl"]
+xla = ["radiocovid-core[xla]"]
+
 
 [tool.black]
 line-length = 88

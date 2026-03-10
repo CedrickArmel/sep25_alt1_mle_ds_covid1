@@ -4,6 +4,7 @@
 
 metric:
   _target_: torchmetrics.classification.MulticlassFBetaScore
+  _partial_: true
   beta: 1.0
   num_classes: ???
   average: macro
@@ -18,5 +19,3 @@ metric:
   distributed_available_fn: null
   sync_on_compute: true
   compute_with_cache: true
-  process_group:
-    _target_: radiocovid.core.utils.get_process_group
