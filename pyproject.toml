@@ -8,6 +8,7 @@ dev = [
     "ipykernel>=7.1.0",
     "ipywidgets>=8.1.8",
     "seaborn>=0.13.2",
+    "captum>=0.7.0",
 ]
 lint = [
     "black>=25.12.0",
