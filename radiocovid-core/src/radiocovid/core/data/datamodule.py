@@ -38,7 +38,7 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, WeightedRandomSampler
 from torchvision.transforms.v2 import Transform
 
-from .datasets import DistributedWeightedSampler, RadioCovidSubset, PaddedShardedSampler
+from .datasets import DistributedWeightedSampler, PaddedShardedSampler, RadioCovidSubset
 
 log = RankedLogger(__name__, rank_zero_only=True)
 
@@ -200,7 +200,14 @@ class DataModule(L.LightningDataModule):
         if self.sample_weights is None:
             self.sample_weights = torch.ones(len(self.train_set))  # type: ignore[arg-type]
         # n = worker_balanced_n_samples(len(self.train_set), self.train_loader.keywords["batch_size"], self.trainer.world_size)  # type: ignore[arg-type]
-        sampler = DistributedWeightedSampler(dataset=self.train_set, weights=self.sample_weights, batch_size=self.train_loader.keywords["batch_size"], num_replicas=self.trainer.world_size, rank=self.trainer.global_rank, generator=get_seeded_generator(self.seed))
+        sampler = DistributedWeightedSampler(
+            dataset=self.train_set,
+            weights=self.sample_weights,
+            batch_size=self.train_loader.keywords["batch_size"],
+            num_replicas=self.trainer.world_size,
+            rank=self.trainer.global_rank,
+            generator=get_seeded_generator(self.seed),
+        )
         log.info(f"Train set size after padding : {sampler.total_size}")
         return self.train_loader(
             dataset=self.train_set,
@@ -216,7 +223,14 @@ class DataModule(L.LightningDataModule):
         """
         log.info(f"Validation set size : {len(self.val_set)}")  # type: ignore[arg-type]
         # n = worker_balanced_n_samples(len(self.val_set), self.eval_loader.keywords["batch_size"], self.trainer.world_size)  # type: ignore[arg-type]
-        sampler = PaddedShardedSampler(dataset=self.val_set, batch_size=self.eval_loader.keywords["batch_size"], num_replicas=self.trainer.world_size, rank=self.trainer.global_rank, shuffle=False, seed=self.seed) 
+        sampler = PaddedShardedSampler(
+            dataset=self.val_set,
+            batch_size=self.eval_loader.keywords["batch_size"],
+            num_replicas=self.trainer.world_size,
+            rank=self.trainer.global_rank,
+            shuffle=False,
+            seed=self.seed,
+        )
         log.info(f"Validation set size after padding : {sampler.total_size}")
         return self.eval_loader(dataset=self.val_set, sampler=sampler, worker_init_fn=seed_worker, generator=get_seeded_generator(self.seed))  # type: ignore[arg-type]
 
@@ -227,6 +241,13 @@ class DataModule(L.LightningDataModule):
         """
         log.info(f"Test set size : {len(self.test_set)}")  # type: ignore[arg-type]
         # n = worker_balanced_n_samples(len(self.test_set), self.eval_loader.keywords["batch_size"], self.trainer.world_size)  # type: ignore[arg-type]
-        sampler = PaddedShardedSampler(dataset=self.test_set, batch_size=self.eval_loader.keywords["batch_size"], num_replicas=self.trainer.world_size, rank=self.trainer.global_rank, shuffle=False, seed=self.seed) 
+        sampler = PaddedShardedSampler(
+            dataset=self.test_set,
+            batch_size=self.eval_loader.keywords["batch_size"],
+            num_replicas=self.trainer.world_size,
+            rank=self.trainer.global_rank,
+            shuffle=False,
+            seed=self.seed,
+        )
         log.info(f"Test set size after padding : {sampler.total_size}")
         return self.eval_loader(dataset=self.test_set, worker_init_fn=seed_worker, generator=get_seeded_generator(self.seed))  # type: ignore[arg-type]
