@@ -175,9 +175,6 @@ class LModule(L.LightningModule):
 
     def on_train_epoch_start(self):
         self.train_loss.reset()
-        sampler = self.trainer.train_dataloader.sampler
-        if hasattr(sampler, "set_epoch"):
-            sampler.set_epoch(self.current_epoch)
 
     def training_step(
         self, batch: "dict[str, Any]", batch_idx: "int"

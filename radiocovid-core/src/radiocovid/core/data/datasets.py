@@ -30,6 +30,9 @@ from typing import Any, Sequence
 from torch.utils.data import Dataset, Subset, Sampler
 from torchvision.datasets import DatasetFolder
 
+from radiocovid.core.utils import RankedLogger
+
+log = RankedLogger(__name__, rank_zero_only=True)
 
 class RadioCovidDataset(DatasetFolder):
     def __getitem__(self, index: int) -> dict[str, Any]:
@@ -121,11 +124,13 @@ class DistributedWeightedSampler(Sampler[int]):
         self.epoch = 0
 
         self.batch_size_eff = self.batch_size * self.num_replicas
-        self.total_size = self.global_num_samples + (self.batch_size_eff - (self.batch_size_eff - (self.global_num_samples % self.batch_size_eff)))
+        self.total_size = math.ceil(self.global_num_samples  / self.batch_size_eff) * self.batch_size_eff
+        # self.total_size = self.global_num_samples + (self.batch_size_eff - (self.batch_size_eff - (self.global_num_samples % self.batch_size_eff)))
         self.num_samples_per_rank = self.total_size // self.num_replicas  # per rank
 
 
     def set_epoch(self, epoch: int) -> None:
+        log.info("Setting epoch in DistributedWeightedSampler")
         self.epoch = epoch
 
     def __iter__(self):
@@ -207,10 +212,11 @@ class PaddedShardedSampler(Sampler[int]):
         self.epoch = 0
 
         self.batch_size_eff = self.batch_size * self.num_replicas
-        self.total_size = self.n + (self.batch_size_eff - (self.batch_size_eff - (self.n % self.batch_size_eff)))
+        self.total_size = math.ceil(self.n / self.batch_size_eff) * self.batch_size_eff
         self.num_samples = self.total_size // self.num_replicas  # per rank
 
     def set_epoch(self, epoch: int) -> None:
+        log.info("Setting epoch in PaddedShardedSampler")
         self.epoch = epoch
 
     def __iter__(self):
