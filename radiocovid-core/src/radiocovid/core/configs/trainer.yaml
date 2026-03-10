@@ -25,3 +25,4 @@ trainer:
   sync_batchnorm: false # Synchronize batch norm layers between process groups/whole world.
   # model_registr: null  # The name of the model being uploaded to Model hub.
   default_root_dir: ${paths.output_dir}
+  use_distributed_sampler: false
