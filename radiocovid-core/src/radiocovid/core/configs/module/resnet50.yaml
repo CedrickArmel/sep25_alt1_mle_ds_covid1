@@ -1,0 +1,8 @@
+# https://docs.pytorch.org/vision/main/models/generated/torchvision.models.resnet50.html
+
+_target_: radiocovid.core.RadioCovidModule
+net:
+  _target_: torchvision.models.resnet50
+  num_classes: ???
+trainable_layers: null
+priors: null

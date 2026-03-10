@@ -1,0 +1,9 @@
+#@package _global_
+
+defaults:
+  - overfit_batch
+  - /module: resnet50
+  - _self_
+
+module:
+  trainable_layers: { "layer4": null, "avgpool": null, "fc": null}
