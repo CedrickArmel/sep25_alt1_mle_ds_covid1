@@ -18,24 +18,24 @@ callbacks:
     logging_interval: step
     log_momentum: false
     log_weight_decay: false
-  early_stopping:
-    monitor: val_score
-    min_delta: 0
-    patience: 2
-    verbose: False
-    mode: max
-    strict: false
-    check_finite: True
-    check_on_train_epoch_end: false
-    log_rank_zero_only: False
+  early_stopping: null
+    #monitor: val_score
+    #min_delta: 0
+    #patience: 2
+    #verbose: False
+    #mode: max
+    #strict: false
+    #check_finite: True
+    #check_on_train_epoch_end: false
+    #log_rank_zero_only: False
   model_summary:
     max_depth: 2
   exception_checkpoint:
     dirpath: ${paths.output_dir}/checkpoints
-    filename: e{epoch:03d}_s{step:06d}_{train_loss:.2e}_{val_loss:.2e}_{score:.2e}
+    filename: epoch_{epoch}_step_{step}_score_{score}
   model_checkpoint:
     dirpath: ${paths.output_dir}/checkpoints
-    filename: e{epoch:03d}_s{step:06d}_{train_loss:.2e}_{val_loss:.2e}_{score:.2e}
+    filename: epoch_{epoch}_step_{step}_score_{score}
     monitor: val_score
     mode: max
     save_last: false
