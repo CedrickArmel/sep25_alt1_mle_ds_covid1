@@ -30,14 +30,14 @@ callbacks:
     filename: e{epoch:03d}_s{step:06d}_{train_loss:.2e}_{val_loss:.2e}_{score:.2e}
     monitor: val_score
     verbose: false # verbosity mode
-    save_last: false # additionally always save an exact copy of the last checkpoint to a file last.ckpt
+    save_last: true # additionally always save an exact copy of the last checkpoint to a file last.ckpt
     save_top_k: 2 # save k best models (determined by above metric)
     mode: max
     auto_insert_metric_name: True # when True, the checkpoints filenames will contain the metric name
     save_weights_only: true # if True, then only the model’s weights will be saved
     every_n_train_steps: 100 # number of training steps between checkpoints
     train_time_interval: null # checkpoints are monitored at the specified time interval
-    every_n_epochs: 1
+    every_n_epochs: null
     save_on_train_epoch_end: false
 
 
@@ -129,6 +129,7 @@ trainer:
   gradient_clip_val: 10
   val_check_interval: 0.5
   gradient_clip_algorithm: norm
+  enable_checkpointing: true
 
 optimized_metric: best_val_score
 
