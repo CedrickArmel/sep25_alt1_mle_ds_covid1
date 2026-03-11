@@ -21,7 +21,6 @@
 # SOFTWARE.
 
 
-
 from torch import nn
 
 
@@ -32,16 +31,13 @@ class VanillaCNN(nn.Module):
 
         # Feature extractor
         self.features = nn.Sequential(
-
             nn.Conv2d(in_channels=3, out_channels=32, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(2),
             nn.Dropout2d(dropout),
-
             nn.Conv2d(32, 64, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(2),
-
             nn.Conv2d(64, 128, 3, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(2),
@@ -50,11 +46,10 @@ class VanillaCNN(nn.Module):
 
         # Classifier
         self.classifier = nn.Sequential(
-
             nn.Flatten(),
-            nn.Linear(128 * 32 * 32, 128),  
+            nn.Linear(128 * 32 * 32, 128),
             nn.ReLU(),
-            nn.Linear(128, num_classes)
+            nn.Linear(128, num_classes),
         )
 
     def forward(self, x):
