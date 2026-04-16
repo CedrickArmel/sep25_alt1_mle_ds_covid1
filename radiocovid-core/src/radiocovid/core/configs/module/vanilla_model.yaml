@@ -1,0 +1,7 @@
+_target_: radiocovid.core.RadioCovidModule
+net:
+  _target_:  radiocovid.core.models.VanillaCNN
+  num_classes: 2
+  dropout: 0.2
+trainable_layers: { "classifier": null }
+priors: null

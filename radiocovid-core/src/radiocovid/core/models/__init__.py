@@ -35,6 +35,8 @@ from torch.optim.lr_scheduler import LRScheduler
 from torchmetrics import MaxMetric, MeanMetric, Metric, MinMetric
 from torchmetrics.utilities import dim_zero_cat
 
+from .vanilla_model import VanillaCNN
+
 log = RankedLogger(__name__, rank_zero_only=True)
 
 
