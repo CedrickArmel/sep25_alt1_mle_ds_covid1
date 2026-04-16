@@ -1,23 +1,46 @@
-
 # -*- coding: utf-8 -*-
-import streamlit as st
-import os
+# MIT License
+#
+# Copyright (c) 2025 @CedrickArmel, @samarita22, @TaxelleT & @Yeyecodes
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
 import glob
 import json
-import yaml
+import os
+import re
+from pathlib import Path
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-import matplotlib.pyplot as plt
-from pathlib import Path
+import streamlit as st
+import yaml
 from PIL import Image
-import re
+
 # =========================
 # CONFIG APP
 # =========================
-st.set_page_config(page_title="RadioCovid – Projet Poumons",
-                   page_icon="🫁",
-                   layout="wide")
+st.set_page_config(
+    page_title="RadioCovid – Projet Poumons", page_icon="🫁", layout="wide"
+)
 
 st.sidebar.title("🫁 Menu")
 PAGES = ["EDA", "Rééquilibrage", "Modèle", "Résultats", "Prédiction", "Conclusion"]
@@ -40,6 +63,7 @@ DATAMODULE_YAML = ROOT / "radiocovid-core/src/radiocovid/core/configs/datamodule
 REPORTS_DIR = ROOT / "reports"
 REPORTS_FIG_DIR = REPORTS_DIR / "figures"
 
+
 # =========================
 # HELPERS
 # =========================
@@ -51,20 +75,24 @@ def load_yaml_safe(path: Path):
     except Exception as e:
         return {"_warning": f"Impossible de charger {path}: {e}"}
 
+
 @st.cache_data
 def list_classes(train_dir: Path):
     if not train_dir.exists():
         return []
     return [c for c in os.listdir(train_dir) if (train_dir / c).is_dir()]
 
+
 @st.cache_data
 def count_by_class(train_dir: Path):
     classes = list_classes(train_dir)
     return {c: len(list((train_dir / c).glob("*.png"))) for c in classes}
 
+
 def get_example_images(folder: Path, n=3):
     imgs = sorted(glob.glob(str(folder / "*.png")))
     return imgs[:n]
+
 
 @st.cache_data
 def find_haralick_dumps(dumps_dir: Path):
@@ -94,6 +122,7 @@ def find_haralick_dumps(dumps_dir: Path):
         results[feature][rep] = arr
     return results
 
+
 def plot_haralick_boxplots(hara: dict):
     if not hara:
         st.info("ℹ️ Aucun dump Haralick trouvé dans `data/00_dumps`.")
@@ -107,12 +136,20 @@ def plot_haralick_boxplots(hara: dict):
     for ft in features:
         for rep in reps:
             # On agrège (moyenne) pour une boîte par classe
-            vals = np.mean(hara[ft][rep], axis=0) if hara[ft][rep].ndim > 1 else hara[ft][rep]
+            vals = (
+                np.mean(hara[ft][rep], axis=0)
+                if hara[ft][rep].ndim > 1
+                else hara[ft][rep]
+            )
             vals = np.array(vals).ravel()
             for v in vals:
-                data_list.append({"Feature": ft.capitalize(),
-                                  "Classe": rep.upper(),
-                                  "Valeur": float(v)})
+                data_list.append(
+                    {
+                        "Feature": ft.capitalize(),
+                        "Classe": rep.upper(),
+                        "Valeur": float(v),
+                    }
+                )
     if not data_list:
         st.info("ℹ️ Pas de données valides pour boxplots.")
         return
@@ -124,6 +161,7 @@ def plot_haralick_boxplots(hara: dict):
     ax.set_ylabel("Valeur (agrégée)")
     ax.legend(loc="best")
     st.pyplot(fig)
+
 
 def plot_haralick_mean_curves(hara: dict):
     if not hara:
@@ -147,9 +185,11 @@ def plot_haralick_mean_curves(hara: dict):
         ax.legend()
         cols[i % 2].pyplot(fig)
 
+
 @st.cache_data
 def find_checkpoints(models_dir: Path):
     return sorted(models_dir.glob("*.ckpt"))
+
 
 @st.cache_data
 def scan_training_logs(logs_dir: Path):
@@ -160,6 +200,7 @@ def scan_training_logs(logs_dir: Path):
         return []
     metrics = list(logs_dir.rglob("*.csv"))
     return metrics
+
 
 def render_resume_card():
     # Inyecta CSS solo una vez por sesión
@@ -266,20 +307,21 @@ def render_resume_card():
     )
 
 
-
 # =========================
 # 1) EDA — basé sur les figures enregistrées dans reports/
 # =========================
 if page == "EDA":
     st.title("🔍 EDA — Exploration des Données")
 
-    st.markdown("""
+    st.markdown(
+        """
     **Objectif** : présenter l’exploration du dataset (source Kaggle) et l’analyse texturale (GLCM/Haralick) à partir
     des figures **déjà générées** par le notebook d’EDA.
 
-    **Dataset** : COVID‑19 Radiography Database (Kaggle)  
+    **Dataset** : COVID‑19 Radiography Database (Kaggle)
     👉 https://www.kaggle.com/tawsifurrahman/covid19-radiography-database
-    """)
+    """
+    )
 
     # -------- utilitaires locaux --------
     def first_existing(*paths: Path) -> Path | None:
@@ -314,39 +356,52 @@ if page == "EDA":
     )
 
     if dist_fig is None:
-        st.warning("⚠️ Aucune figure de répartition trouvée (recherché `reports/images.png`).")
+        st.warning(
+            "⚠️ Aucune figure de répartition trouvée (recherché `reports/images.png`)."
+        )
     else:
-        st.image(str(dist_fig), caption="Distribution du dataset par pathologie", use_container_width=True)
-        st.markdown("""
-        **Lecture** : la figure récapitule la répartition des images par catégorie.  
+        st.image(
+            str(dist_fig),
+            caption="Distribution du dataset par pathologie",
+            use_container_width=True,
+        )
+        st.markdown(
+            """
+        **Lecture** : la figure récapitule la répartition des images par catégorie.
         Elle permet de vérifier d’un coup d’œil les **déséquilibres de classes** (ex. sur‑représentation de *Normal*).
-        """)
-        
-    render_resume_card() 
+        """
+        )
+
+    render_resume_card()
 
     # -------- 2) Analyse texturale (GLCM / Haralick) --------
     st.header("🧪 Analyse texturale — GLCM & caractéristiques de Haralick")
 
-    st.markdown("""
+    st.markdown(
+        """
     La **GLCM** (*Gray‑Level Co‑occurrence Matrix*) capture la structure spatiale des niveaux de gris.
     À partir de cette matrice, on calcule des **caractéristiques de Haralick** (ex. *contrast, energy, entropy, homogeneity, correlation*),
     qui permettent d’analyser la **texture pulmonaire** (motifs, granularité, régularité).
 
     **Idées clés (issues du notebook)** :
-    - Le **contrast** ressort comme **fortement discriminant** entre catégories.  
-    - **Entropy** et **homogeneity** sont souvent **corrélées négativement**, signe d’un compromis *désordre ↔ homogénéité*.  
+    - Le **contrast** ressort comme **fortement discriminant** entre catégories.
+    - **Entropy** et **homogeneity** sont souvent **corrélées négativement**, signe d’un compromis *désordre ↔ homogénéité*.
     - Des **différences d’intensité moyenne** entre classes imposent une **normalisation** avant l’entraînement.
-    """)
+    """
+    )
 
     # Helpers para ordenar "harlick, harlick1, harlick2, ..."
     def natural_sort_key(p: Path):
-        tokens = re.findall(r'\d+|\D+', p.stem.lower())
+        tokens = re.findall(r"\d+|\D+", p.stem.lower())
         return [int(t) if t.isdigit() else t for t in tokens]
 
     def list_harlick_figs_carousel() -> list[Path]:
         # Busca en reports/ y reports/figures/ todos los harlick*.png
         candidates = []
-        for pat in [str(REPORTS_DIR / "harlick*.png"), str(REPORTS_FIG_DIR / "harlick*.png")]:
+        for pat in [
+            str(REPORTS_DIR / "harlick*.png"),
+            str(REPORTS_FIG_DIR / "harlick*.png"),
+        ]:
             candidates.extend([Path(p) for p in glob.glob(pat)])
         # Elimina duplicados manteniendo el primero encontrado
         unique = {str(p): p for p in candidates}
@@ -371,14 +426,24 @@ if page == "EDA":
 
         with col_prev:
             if st.button("◀", use_container_width=True, key=f"{key}_prev"):
-                st.session_state[f"{key}_pos"] = n if st.session_state[f"{key}_pos"] == 1 else st.session_state[f"{key}_pos"] - 1
+                st.session_state[f"{key}_pos"] = (
+                    n
+                    if st.session_state[f"{key}_pos"] == 1
+                    else st.session_state[f"{key}_pos"] - 1
+                )
 
         with col_next:
             if st.button("▶", use_container_width=True, key=f"{key}_next"):
-                st.session_state[f"{key}_pos"] = 1 if st.session_state[f"{key}_pos"] == n else st.session_state[f"{key}_pos"] + 1
+                st.session_state[f"{key}_pos"] = (
+                    1
+                    if st.session_state[f"{key}_pos"] == n
+                    else st.session_state[f"{key}_pos"] + 1
+                )
 
         # Slider de posición (sincronizado)
-        pos = st.slider("Position", 1, n, st.session_state[f"{key}_pos"], key=f"{key}_slider")
+        pos = st.slider(
+            "Position", 1, n, st.session_state[f"{key}_pos"], key=f"{key}_slider"
+        )
         st.session_state[f"{key}_pos"] = pos
         idx = pos - 1
 
@@ -388,45 +453,54 @@ if page == "EDA":
         col_img.image(str(current), caption=caption, use_container_width=True)
 
         with st.expander("📝 Interprétation (résumé)"):
-            st.markdown("""
-            - **Contrast** : très informatif pour différencier les catégories – signatures texturales plus marquées.  
-            - **Entropy vs Homogeneity** : corrélation **fortement négative** (textures désorganisées vs régulières).  
-            - **Petites distances (0–3 px)** : forte corrélation locale malgré l’irrégularité – *désordre structuré*.  
-            - **Normalisation** recommandée pour corriger les biais d’intensité entre classes.  
+            st.markdown(
+                """
+            - **Contrast** : très informatif pour différencier les catégories – signatures texturales plus marquées.
+            - **Entropy vs Homogeneity** : corrélation **fortement négative** (textures désorganisées vs régulières).
+            - **Petites distances (0–3 px)** : forte corrélation locale malgré l’irrégularité – *désordre structuré*.
+            - **Normalisation** recommandée pour corriger les biais d’intensité entre classes.
             - **Outliers** (poumons hors cadre, asymétries extrêmes) à **retirer** avant l’entraînement.
-            """)
-
+            """
+            )
 
     # -------- 3) Biais, limites & prochaines étapes --------
     st.header("⚠️ Biais & limites observés")
-    st.markdown("""
-    - **Déséquilibre de classes** (ex. *Normal* > autres) → à corriger par **rééquilibrage** (under/over sampling).  
-    - **Variations d’acquisition** (distance/zoom, qualité des masques) → **normalisation** indispensable.  
+    st.markdown(
+        """
+    - **Déséquilibre de classes** (ex. *Normal* > autres) → à corriger par **rééquilibrage** (under/over sampling).
+    - **Variations d’acquisition** (distance/zoom, qualité des masques) → **normalisation** indispensable.
     - **Masques hors cadre / asymétries extrêmes** → **filtrage** via règles (IQR, contrôle de bords).
-    """)
+    """
+    )
 
     st.subheader("🔮 Prochaines étapes côté EDA")
-    st.markdown("""
-    - Intégrer des visualisations **avant/après** normalisation.  
-    - Ajouter des métriques **par classe** (moyennes Haralick, histogrammes d’intensité).  
+    st.markdown(
+        """
+    - Intégrer des visualisations **avant/après** normalisation.
+    - Ajouter des métriques **par classe** (moyennes Haralick, histogrammes d’intensité).
     - Documenter un **protocole de nettoyage** reproductible (manifest + règles).
-    """)
+    """
+    )
 # =========================
 # 2) Rééquilibrage
 # =========================
 elif page == "Rééquilibrage":
     st.title("⚖️ Rééquilibrage des classes")
 
-    st.markdown("""
-**But** : Expliquer et illustrer la création d’un dataset équilibré (binaire ou multiclasses)  
+    st.markdown(
+        """
+**But** : Expliquer et illustrer la création d’un dataset équilibré (binaire ou multiclasses)
 via les symlinks de `train_folder.py`.
 
-> Cette page **n’exécute pas** le rééquilibrage (sécurité VM).  
+> Cette page **n’exécute pas** le rééquilibrage (sécurité VM).
 > Elle **explique** le pipeline et montre la distribution si `data/train` est présent.
-""")
+"""
+    )
 
     if not TRAIN_DIR.exists():
-        st.warning("⚠️ `data/train` introuvable. Impossible d’afficher la distribution réelle.")
+        st.warning(
+            "⚠️ `data/train` introuvable. Impossible d’afficher la distribution réelle."
+        )
         st.stop()
 
     st.subheader("📉 Distribution actuelle")
@@ -434,12 +508,14 @@ via les symlinks de `train_folder.py`.
     st.write(counts)
 
     st.subheader("🧭 Pipeline (résumé)")
-    st.code("""
+    st.code(
+        """
 - Entrée : manifest parquet (issu de clean)
 - Mapping de classes (binaire vs multiclasses)
 - Création de symlinks par classe équilibrée
 - Dossier final prêt pour l'entraînement
-""")
+"""
+    )
 
 # =========================
 # 3) Modèle
@@ -447,9 +523,11 @@ via les symlinks de `train_folder.py`.
 elif page == "Modèle":
     st.title("🧠 Modèle (VGG11) & Config Hydra")
 
-    st.markdown("""
+    st.markdown(
+        """
 **But** : Présenter l’architecture et la configuration utilisées pour l’entraînement (Hydra + Lightning).
-""")
+"""
+    )
 
     st.subheader("📄 Module (default.yaml)")
     module_cfg = load_yaml_safe(MODULE_YAML)
@@ -460,12 +538,14 @@ elif page == "Modèle":
     st.json(dm_cfg)
 
     st.subheader("⚙️ Pipeline d'entraînement (résumé)")
-    st.code("""
+    st.code(
+        """
 - callbacks, loggers
 - Lightning Trainer
 - DataModule + Module
 - fit(), puis test()
-""")
+"""
+    )
 
 # =========================
 # 4) Résultats
@@ -473,13 +553,17 @@ elif page == "Modèle":
 elif page == "Résultats":
     st.title("📈 Résultats d'entraînement")
 
-    st.markdown("""
+    st.markdown(
+        """
 **But** : Afficher les courbes et métriques si des logs existent (`logs/`).
-""")
+"""
+    )
 
     metrics_files = scan_training_logs(LOGS_DIR)
     if not metrics_files:
-        st.info("ℹ️ Aucun log détecté dans `logs/`. Lorsque des métriques seront disponibles, elles seront affichées ici.")
+        st.info(
+            "ℹ️ Aucun log détecté dans `logs/`. Lorsque des métriques seront disponibles, elles seront affichées ici."
+        )
     else:
         st.success(f"✅ Fichiers métriques trouvés : {len(metrics_files)}")
         st.write("Exemple de prévisualisation (premier CSV détecté) :")
@@ -497,18 +581,22 @@ elif page == "Prédiction":
 
     ckpts = find_checkpoints(MODELS_DIR)
     if not ckpts:
-        st.error("""
+        st.error(
+            """
 ❌ Aucun checkpoint `.ckpt` trouvé dans `models/`.
 
 Pour activer la prédiction :
 1) Entraîner le modèle (idéalement dans Colab)
 2) Déposer `best.ckpt` dans `models/`
 3) Recharger l'application
-""")
+"""
+        )
         st.stop()
 
     st.success(f"✅ Checkpoint détecté : {ckpts[-1].name}")
-    st.info("Chargement & inference : à intégrer selon le format Lightning (RadioCovidModule).")
+    st.info(
+        "Chargement & inference : à intégrer selon le format Lightning (RadioCovidModule)."
+    )
 
 # =========================
 # 6) Conclusion
@@ -516,14 +604,16 @@ Pour activer la prédiction :
 elif page == "Conclusion":
     st.title("🔚 Conclusion & Perspectives")
 
-    st.markdown("""
+    st.markdown(
+        """
 ### 🧾 Conclusion
-- Pipeline mis en place : **EDA → nettoyage → rééquilibrage → configuration du modèle**  
-- Architecture utilisée : **VGG11 (torchvision)** sous **Lightning + Hydra**  
+- Pipeline mis en place : **EDA → nettoyage → rééquilibrage → configuration du modèle**
+- Architecture utilisée : **VGG11 (torchvision)** sous **Lightning + Hydra**
 - L’app Streamlit est prête à intégrer **résultats entraînés** et **prédiction** dès que les artefacts sont fournis.
 
 ### 🔮 Perspectives
-- Intégration des **courbes réelles** (logs/), **matrices de confusion** et **Grad‑CAM**  
-- Gestion **binaire vs multiclasses** via configuration  
-- Déploiement final (Streamlit Cloud / conteneur)  
-""")
+- Intégration des **courbes réelles** (logs/), **matrices de confusion** et **Grad‑CAM**
+- Gestion **binaire vs multiclasses** via configuration
+- Déploiement final (Streamlit Cloud / conteneur)
+"""
+    )
