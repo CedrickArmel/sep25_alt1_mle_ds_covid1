@@ -19,34 +19,27 @@ callbacks:
     logging_interval: step
     log_momentum: false
     log_weight_decay: false
-  early_stopping:
-    monitor: val_score
-    min_delta: 0.0
-    patience: 2
-    verbose: False
-    mode: max
-    strict: false
-    check_finite: True
-    divergence_threshold: 0.5
-    check_on_train_epoch_end: false
-    log_rank_zero_only: False
   model_summary:
-    max_depth: 2
+    max_depth: -1
+  early_stopping: null
   exception_checkpoint:
     dirpath: ${paths.output_dir}/checkpoints
-    filename: e{epoch:03d}_s{step:06d}_{train_loss:.2e}_{val_loss:.2e}_{score:.2e}
+    filename: exception_checkpoint
   model_checkpoint:
     dirpath: ${paths.output_dir}/checkpoints
     filename: e{epoch:03d}_s{step:06d}_{train_loss:.2e}_{val_loss:.2e}_{score:.2e}
     monitor: val_score
+    verbose: false # verbosity mode
+    save_last: true # additionally always save an exact copy of the last checkpoint to a file last.ckpt
+    save_top_k: 2 # save k best models (determined by above metric)
     mode: max
-    save_last: false
-    save_top_k: 1
-    every_n_train_steps: 0
-    every_n_epochs: 1
-    save_weights_only: false
+    auto_insert_metric_name: True # when True, the checkpoints filenames will contain the metric name
+    save_weights_only: true # if True, then only the model’s weights will be saved
+    every_n_train_steps: 100 # number of training steps between checkpoints
+    train_time_interval: null # checkpoints are monitored at the specified time interval
+    every_n_epochs: null
     save_on_train_epoch_end: false
-    auto_insert_metric_name: False
+
 
 loggers:
   wandb:
@@ -57,12 +50,14 @@ loggers:
     save_dir: ${paths.output_dir}/tensorboard/
 
 module:
+  trainable_layers: { "layer4": null, "avgpool": null, "fc": null}
   net:
     num_classes: 2
   scheduler:
     total_iters: 100000
+  priors: null
   optimizer:
-    lr: 5.74e-5
+    lr: 2.296e-4
     weight_decay: 0
   metric:
     num_classes: 2
@@ -70,7 +65,6 @@ module:
     alpha: 0.2
     gamma: 4
     to_onehot_y: true
-  trainable_layers: { "layer4": null, "avgpool": null, "fc": null}
 
 datamodule:
   dataset:
@@ -94,13 +88,13 @@ datamodule:
           - _target_: torchvision.transforms.RandomResizedCrop
             size: 256
             scale: [0.9, 1.1]
-        p: 0.0
+        p: 0.0063577427335135914
       - _target_: torchvision.transforms.RandomApply
         transforms:
           - _target_: torchvision.transforms.ColorJitter
             brightness: 0.1
             contrast: 0.2
-        p: 0.0
+        p: 0.00408769734611091
       - _target_: torchvision.transforms.ToTensor
       - _target_: torchvision.transforms.Normalize
         mean: [128]
@@ -113,13 +107,13 @@ datamodule:
         mean: [128]
         std: [65]
   train_loader:
-    batch_size: 2
+    batch_size: 24
     num_workers: 2
     prefetch_factor: 64
     persistent_workers: true
     shuffle: false
   eval_loader:
-    batch_size: 16
+    batch_size: 28
     num_workers: 2
     prefetch_factor: 32
     persistent_workers: true
@@ -133,7 +127,7 @@ datamodule:
 trainer:
   max_epochs: 10
   gradient_clip_val: 10
-  val_check_interval: 1.0
+  val_check_interval: 0.5
   gradient_clip_algorithm: norm
   enable_checkpointing: true
 
@@ -146,22 +140,9 @@ determinism:
   use_deterministic_algorithms: false
   warn_only: true
 
-hydra:
-  sweeper:
-    direction: maximize
-    n_trials: 20
-    sampler:
-      n_startup_trials: 1
-    params:
-      datamodule.train_loader.batch_size: range(2, 10, step=2)
-      datamodule.train_transform.transforms.0.p: tag(log, interval(1e-4, 0.3))
-      datamodule.train_transform.transforms.1.p: tag(log, interval(1e-4, 0.3))
-
 seed: 4294967295
 tags:
-  - overfit_ts
-  - resnet50_binary_hpt
-  - v2
+  - final
   - ${stage}
 train: true
 test: true

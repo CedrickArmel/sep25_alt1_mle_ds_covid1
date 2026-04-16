@@ -62,7 +62,7 @@ module:
   scheduler:
     total_iters: 100000
   optimizer:
-    lr: 5.74e-5
+    lr: 5.74e-5 # multiplier par 4 sur TPU
     weight_decay: 0
   metric:
     num_classes: 2
@@ -113,7 +113,7 @@ datamodule:
         mean: [128]
         std: [65]
   train_loader:
-    batch_size: 2
+    batch_size: 6
     num_workers: 2
     prefetch_factor: 64
     persistent_workers: true
@@ -153,7 +153,6 @@ hydra:
     sampler:
       n_startup_trials: 1
     params:
-      datamodule.train_loader.batch_size: range(2, 10, step=2)
       datamodule.train_transform.transforms.0.p: tag(log, interval(1e-4, 0.3))
       datamodule.train_transform.transforms.1.p: tag(log, interval(1e-4, 0.3))
 
