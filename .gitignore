@@ -173,3 +173,17 @@ cython_debug/
 **/multiruns/
 !radiocovid-core/**/data
 /data
+
+# Entorno virtual
+.venv310/
+
+# Modelos y pesos
+models/
+
+# Archivos DVC sensibles
+dvc-remote-*.json
+
+# Carpeta de inferencia local (si existe)
+data/inference_images/
+
+simple_train/
