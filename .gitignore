@@ -173,3 +173,8 @@ cython_debug/
 **/multiruns/
 !radiocovid-core/**/data
 /data
+
+# Scripts de test intermédiaires
+check_wandb_acess.py
+temps_wandb_test.py
+wandb_run_inspect.py
