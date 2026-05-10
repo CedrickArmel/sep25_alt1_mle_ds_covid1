@@ -174,7 +174,21 @@ cython_debug/
 !radiocovid-core/**/data
 /data
 
-# Scripts de test intermédiaires
+# Intermediate test scripts
 check_wandb_acess.py
 temps_wandb_test.py
 wandb_run_inspect.py
+
+# Virtual environment
+.venv310/
+
+# Model weights
+models/
+
+# Sensitive DVC files
+dvc-remote-*.json
+
+# Local inference folder
+data/inference_images/
+
+simple_train/
