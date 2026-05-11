@@ -313,15 +313,13 @@ def render_resume_card():
 if page == "EDA":
     st.title("🔍 EDA — Exploration des Données")
 
-    st.markdown(
-        """
+    st.markdown("""
     **Objectif** : présenter l’exploration du dataset (source Kaggle) et l’analyse texturale (GLCM/Haralick) à partir
     des figures **déjà générées** par le notebook d’EDA.
 
     **Dataset** : COVID‑19 Radiography Database (Kaggle)
     👉 https://www.kaggle.com/tawsifurrahman/covid19-radiography-database
-    """
-    )
+    """)
 
     # -------- utilitaires locaux --------
     def first_existing(*paths: Path) -> Path | None:
@@ -365,20 +363,17 @@ if page == "EDA":
             caption="Distribution du dataset par pathologie",
             use_container_width=True,
         )
-        st.markdown(
-            """
+        st.markdown("""
         **Lecture** : la figure récapitule la répartition des images par catégorie.
         Elle permet de vérifier d’un coup d’œil les **déséquilibres de classes** (ex. sur‑représentation de *Normal*).
-        """
-        )
+        """)
 
     render_resume_card()
 
     # -------- 2) Analyse texturale (GLCM / Haralick) --------
     st.header("🧪 Analyse texturale — GLCM & caractéristiques de Haralick")
 
-    st.markdown(
-        """
+    st.markdown("""
     La **GLCM** (*Gray‑Level Co‑occurrence Matrix*) capture la structure spatiale des niveaux de gris.
     À partir de cette matrice, on calcule des **caractéristiques de Haralick** (ex. *contrast, energy, entropy, homogeneity, correlation*),
     qui permettent d’analyser la **texture pulmonaire** (motifs, granularité, régularité).
@@ -387,8 +382,7 @@ if page == "EDA":
     - Le **contrast** ressort comme **fortement discriminant** entre catégories.
     - **Entropy** et **homogeneity** sont souvent **corrélées négativement**, signe d’un compromis *désordre ↔ homogénéité*.
     - Des **différences d’intensité moyenne** entre classes imposent une **normalisation** avant l’entraînement.
-    """
-    )
+    """)
 
     # Helpers para ordenar "harlick, harlick1, harlick2, ..."
     def natural_sort_key(p: Path):
@@ -453,49 +447,41 @@ if page == "EDA":
         col_img.image(str(current), caption=caption, use_container_width=True)
 
         with st.expander("📝 Interprétation (résumé)"):
-            st.markdown(
-                """
+            st.markdown("""
             - **Contrast** : très informatif pour différencier les catégories – signatures texturales plus marquées.
             - **Entropy vs Homogeneity** : corrélation **fortement négative** (textures désorganisées vs régulières).
             - **Petites distances (0–3 px)** : forte corrélation locale malgré l’irrégularité – *désordre structuré*.
             - **Normalisation** recommandée pour corriger les biais d’intensité entre classes.
             - **Outliers** (poumons hors cadre, asymétries extrêmes) à **retirer** avant l’entraînement.
-            """
-            )
+            """)
 
     # -------- 3) Biais, limites & prochaines étapes --------
     st.header("⚠️ Biais & limites observés")
-    st.markdown(
-        """
+    st.markdown("""
     - **Déséquilibre de classes** (ex. *Normal* > autres) → à corriger par **rééquilibrage** (under/over sampling).
     - **Variations d’acquisition** (distance/zoom, qualité des masques) → **normalisation** indispensable.
     - **Masques hors cadre / asymétries extrêmes** → **filtrage** via règles (IQR, contrôle de bords).
-    """
-    )
+    """)
 
     st.subheader("🔮 Prochaines étapes côté EDA")
-    st.markdown(
-        """
+    st.markdown("""
     - Intégrer des visualisations **avant/après** normalisation.
     - Ajouter des métriques **par classe** (moyennes Haralick, histogrammes d’intensité).
     - Documenter un **protocole de nettoyage** reproductible (manifest + règles).
-    """
-    )
+    """)
 # =========================
 # 2) Rééquilibrage
 # =========================
 elif page == "Rééquilibrage":
     st.title("⚖️ Rééquilibrage des classes")
 
-    st.markdown(
-        """
+    st.markdown("""
 **But** : Expliquer et illustrer la création d’un dataset équilibré (binaire ou multiclasses)
 via les symlinks de `train_folder.py`.
 
 > Cette page **n’exécute pas** le rééquilibrage (sécurité VM).
 > Elle **explique** le pipeline et montre la distribution si `data/train` est présent.
-"""
-    )
+""")
 
     if not TRAIN_DIR.exists():
         st.warning(
@@ -508,14 +494,12 @@ via les symlinks de `train_folder.py`.
     st.write(counts)
 
     st.subheader("🧭 Pipeline (résumé)")
-    st.code(
-        """
+    st.code("""
 - Entrée : manifest parquet (issu de clean)
 - Mapping de classes (binaire vs multiclasses)
 - Création de symlinks par classe équilibrée
 - Dossier final prêt pour l'entraînement
-"""
-    )
+""")
 
 # =========================
 # 3) Modèle
@@ -523,11 +507,9 @@ via les symlinks de `train_folder.py`.
 elif page == "Modèle":
     st.title("🧠 Modèle (VGG11) & Config Hydra")
 
-    st.markdown(
-        """
+    st.markdown("""
 **But** : Présenter l’architecture et la configuration utilisées pour l’entraînement (Hydra + Lightning).
-"""
-    )
+""")
 
     st.subheader("📄 Module (default.yaml)")
     module_cfg = load_yaml_safe(MODULE_YAML)
@@ -538,14 +520,12 @@ elif page == "Modèle":
     st.json(dm_cfg)
 
     st.subheader("⚙️ Pipeline d'entraînement (résumé)")
-    st.code(
-        """
+    st.code("""
 - callbacks, loggers
 - Lightning Trainer
 - DataModule + Module
 - fit(), puis test()
-"""
-    )
+""")
 
 # =========================
 # 4) Résultats
@@ -553,11 +533,9 @@ elif page == "Modèle":
 elif page == "Résultats":
     st.title("📈 Résultats d'entraînement")
 
-    st.markdown(
-        """
+    st.markdown("""
 **But** : Afficher les courbes et métriques si des logs existent (`logs/`).
-"""
-    )
+""")
 
     metrics_files = scan_training_logs(LOGS_DIR)
     if not metrics_files:
@@ -581,16 +559,14 @@ elif page == "Prédiction":
 
     ckpts = find_checkpoints(MODELS_DIR)
     if not ckpts:
-        st.error(
-            """
+        st.error("""
 ❌ Aucun checkpoint `.ckpt` trouvé dans `models/`.
 
 Pour activer la prédiction :
 1) Entraîner le modèle (idéalement dans Colab)
 2) Déposer `best.ckpt` dans `models/`
 3) Recharger l'application
-"""
-        )
+""")
         st.stop()
 
     st.success(f"✅ Checkpoint détecté : {ckpts[-1].name}")
@@ -604,8 +580,7 @@ Pour activer la prédiction :
 elif page == "Conclusion":
     st.title("🔚 Conclusion & Perspectives")
 
-    st.markdown(
-        """
+    st.markdown("""
 ### 🧾 Conclusion
 - Pipeline mis en place : **EDA → nettoyage → rééquilibrage → configuration du modèle**
 - Architecture utilisée : **VGG11 (torchvision)** sous **Lightning + Hydra**
@@ -615,5 +590,4 @@ elif page == "Conclusion":
 - Intégration des **courbes réelles** (logs/), **matrices de confusion** et **Grad‑CAM**
 - Gestion **binaire vs multiclasses** via configuration
 - Déploiement final (Streamlit Cloud / conteneur)
-"""
-    )
+""")
