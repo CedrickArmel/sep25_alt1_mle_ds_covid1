@@ -28,7 +28,7 @@ from typing import Any
 
 import lightning.pytorch as L
 import torch
-from radiocovid.core.utils import RankedLogger
+from radiocovid.utils import RankedLogger
 from torch.nn import Module
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler

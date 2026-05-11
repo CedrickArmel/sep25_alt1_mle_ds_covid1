@@ -30,10 +30,12 @@ requires-python = ">=3.10,<3.11"
 dependencies = ["radiocovid-core"]
 
 [project.optional-dependencies]
-all = ["radiocovid-core", "radiocovid-etl"]
-all_xla = ["radiocovid-core[xla]", "radiocovid-etl"]
+all = ["radiocovid-core", "radiocovid-etl", "radiocovid-inference", "radiocovid-app"]
+all_xla = ["radiocovid-core[xla]", "radiocovid-etl", "radiocovid-inference", "radiocovid-app"]
 etl = ["radiocovid-etl"]
 xla = ["radiocovid-core[xla]"]
+inference = ["radiocovid-inference"]
+app = ["radiocovid-app"]
 
 
 [tool.black]
@@ -47,9 +49,11 @@ namespace = true
 
 [tool.pytest.ini_options]
 testpaths = [
+    "radiocovid-utils/tests",
     "radiocovid-core/tests",
     "radiocovid-etl/tests",
     "radiocovid-inference/tests",
+    "radiocovid-app/tests",
 ]
 addopts = "--import-mode=importlib --cov=radiocovid --cov-report=term-missing"
 
@@ -57,8 +61,11 @@ addopts = "--import-mode=importlib --cov=radiocovid --cov-report=term-missing"
 exclude = ["tests/"]
 
 [tool.uv.workspace]
-members = ["radiocovid-core", "radiocovid-etl"]
+members = ["radiocovid-utils", "radiocovid-core", "radiocovid-etl", "radiocovid-inference", "radiocovid-app"]
 
 [tool.uv.sources]
+radiocovid-utils = { workspace = true }
 radiocovid-core = { workspace = true }
 radiocovid-etl = { workspace = true }
+radiocovid-inference = { workspace = true }
+radiocovid-app = { workspace = true }

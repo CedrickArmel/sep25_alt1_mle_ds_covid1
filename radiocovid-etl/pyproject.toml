@@ -39,6 +39,7 @@ dependencies = [
     "opencv-python>=4.12.0.88",
     "openpyxl>=3.1.5",
     "scikit-image>=0.25.2",
+    "radiocovid-utils",
 ]
 [project.scripts]
 radiocovid-clean = "radiocovid.etl:clean"
@@ -58,3 +59,4 @@ module-name = "radiocovid.etl"
 
 [tool.uv.sources]
 radiocovid-core = { workspace = true }
+radiocovid-utils = { workspace = true }

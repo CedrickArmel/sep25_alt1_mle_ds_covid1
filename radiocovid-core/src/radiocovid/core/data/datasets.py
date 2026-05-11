@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any, Sequence
 
 import torch
-from radiocovid.core.utils import RankedLogger
+from radiocovid.utils import RankedLogger
 from torch.utils.data import Dataset, Sampler, Subset
 from torchvision.datasets import DatasetFolder
 

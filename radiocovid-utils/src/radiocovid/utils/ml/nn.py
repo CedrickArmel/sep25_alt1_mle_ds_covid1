@@ -1,0 +1,55 @@
+# MIT License
+#
+# Copyright (c) 2025 @CedrickArmel, @samarita22, @TaxelleT & @Yeyecodes
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+import torch
+from torch.nn.init import (
+    calculate_gain,
+    kaiming_normal_,
+    kaiming_uniform_,
+    xavier_normal_,
+    xavier_uniform_,
+)
+
+
+def initialize_weights(
+    module: "torch.nn.Module",
+    dist: "str",
+    a: "float" = 0.1,
+    mode: "str" = "fan_out",
+    nonlinearity: "str" = "leaky_relu",
+) -> "None":
+    """Applies to a model to init its params"""
+    if isinstance(module, torch.nn.Linear):
+        gain = calculate_gain(nonlinearity=nonlinearity)
+        if dist == "normal":
+            xavier_normal_(tensor=module.weight, gain=gain)
+        elif dist == "uniform":
+            xavier_uniform_(tensor=module.weight, gain=gain)
+    elif isinstance(module, (torch.nn.Conv2d, torch.nn.Conv3d)):
+        if dist == "normal":
+            kaiming_normal_(
+                tensor=module.weight, a=a, mode=mode, nonlinearity=nonlinearity
+            )
+        elif dist == "uniform":
+            kaiming_uniform_(
+                tensor=module.weight, a=a, mode=mode, nonlinearity=nonlinearity
+            )

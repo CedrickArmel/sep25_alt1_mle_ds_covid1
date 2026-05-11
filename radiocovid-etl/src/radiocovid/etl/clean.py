@@ -28,9 +28,9 @@ import hydra
 import numpy as np
 import pandas as pd
 from omegaconf import DictConfig
+from radiocovid.utils import Logger
 
 from .preprocessings import remove_outliers
-from .utils import Logger
 
 log = Logger(__name__)
 

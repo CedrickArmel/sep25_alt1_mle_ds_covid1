@@ -140,7 +140,7 @@ trainer:
 optimized_metric: best_val_score
 
 determinism:
-  _target_: radiocovid.core.utils.set_seed
+  _target_: radiocovid.utils.ml.set_seed
   seed: ${seed}
   cudnn_backend: false
   use_deterministic_algorithms: false

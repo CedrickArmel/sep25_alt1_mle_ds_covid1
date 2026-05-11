@@ -52,17 +52,5 @@ def test_import_core_models():
         importlib.import_module(mod)
 
 
-def test_import_core_utils():
-    for mod in (
-        "radiocovid.core.utils",
-        "radiocovid.core.utils.instantiators",
-        "radiocovid.core.utils.logging_utils",
-        "radiocovid.core.utils.pylogger",
-        "radiocovid.core.utils.rich_utils",
-        "radiocovid.core.utils.utils",
-    ):
-        importlib.import_module(mod)
-
-
 def test_import_core_train():
     importlib.import_module("radiocovid.core.train")

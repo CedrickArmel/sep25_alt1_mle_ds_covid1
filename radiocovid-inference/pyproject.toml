@@ -7,6 +7,7 @@ test = [
     "pytest>=8.0.0",
     "pytest-cov>=6.0.0",
     "pytest-mock>=3.0.0",
+    "httpx>=0.27",
 ]
 
 [project]
@@ -18,7 +19,16 @@ dependencies = [
     "torchvision>=0.21.0",
     "pillow>=11.0.0",
     "wandb>=0.21.0",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "python-multipart>=0.0.9",
+    "radiocovid-core",
+    "radiocovid-utils",
 ]
+
+[project.scripts]
+radiocovid-serve = "radiocovid.inference.api:main"
+radiocovid-pull-ckpt = "radiocovid.inference.checkpoints:_cli"
 
 [tool.black]
 line-length = 88
@@ -28,3 +38,11 @@ profile = "black"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.uv.build-backend]
+namespace = true
+module-name = "radiocovid.inference"
+
+[tool.uv.sources]
+radiocovid-core = { workspace = true }
+radiocovid-utils = { workspace = true }

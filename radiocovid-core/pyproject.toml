@@ -46,6 +46,7 @@ dependencies = [
     "scikit-image>=0.25.2",
     "torchvision>=0.21.0",
     "scikit-learn>=1.7.2",
+    "radiocovid-utils[ml]",
 ]
 
 [project.optional-dependencies]
@@ -76,4 +77,5 @@ format = "flat"
 
 [tool.uv.sources]
 radiocovid-etl = { workspace = true }
+radiocovid-utils = { workspace = true }
 libtpu = { index = "libtpu-wheels" }
