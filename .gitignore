@@ -1,4 +1,12 @@
+# Claude local settings
+.claude/settings.local.json
+.cc-marker
+.settings.local.json.orig
+.settings.local.json.bak
+
+# DS
 *.DS_Store
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
