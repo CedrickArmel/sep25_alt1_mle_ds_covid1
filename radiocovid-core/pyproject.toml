@@ -16,7 +16,11 @@ lint = [
     "pre-commit>=4.5.1",
 ]
 typing = ["mypy>=1.19.1"]
-test = []
+test = [
+    "pytest>=8.0.0",
+    "pytest-cov>=6.0.0",
+    "pytest-mock>=3.0.0",
+]
 
 [project]
 name = "radiocovid-core"
@@ -56,6 +60,9 @@ line-length = 88
 
 [tool.isort]
 profile = "black"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.uv.build-backend]
 namespace = true

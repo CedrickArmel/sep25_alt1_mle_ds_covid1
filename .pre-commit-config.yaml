@@ -42,6 +42,7 @@ repos:
     hooks:
       - id: mypy
         args: [--config-file, mypy.ini]
+        exclude: ^.+/tests/
   - repo: https://github.com/kynan/nbstripout
     rev: 0.9.1
     hooks:
