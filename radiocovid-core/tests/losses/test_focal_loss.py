@@ -26,7 +26,6 @@ import pytest
 import torch
 import torch.nn.functional as F
 import torchvision.ops as tv_ops
-
 from radiocovid.core.losses.focal_loss import (
     FocalLoss,
     sigmoid_focal_loss,

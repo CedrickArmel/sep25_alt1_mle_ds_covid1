@@ -28,7 +28,6 @@ import pytest
 import torch
 import torch.nn as nn
 from omegaconf import OmegaConf
-
 from radiocovid.core.utils.utils import (
     balance_data_world_size,
     extras,

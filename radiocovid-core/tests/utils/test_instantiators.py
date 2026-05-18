@@ -26,13 +26,12 @@ import pytest
 import torch
 import torch.nn as nn
 from omegaconf import OmegaConf
-from torch.optim.lr_scheduler import SequentialLR
-
 from radiocovid.core.utils.instantiators import (
     instantiate_callbacks,
     instantiate_loggers,
     sequential_scheduler,
 )
+from torch.optim.lr_scheduler import SequentialLR
 
 # --------------------------------------------------------------------------- #
 # instantiate_callbacks                                                        #
