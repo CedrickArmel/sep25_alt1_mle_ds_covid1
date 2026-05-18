@@ -21,7 +21,6 @@
 # SOFTWARE.
 
 import torch
-
 from radiocovid.core.data.transforms import Squeeze
 
 
