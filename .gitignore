@@ -1,4 +1,12 @@
+# Claude local settings
+.claude/settings.local.json
+.cc-marker
+.settings.local.json.orig
+.settings.local.json.bak
+
+# DS
 *.DS_Store
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -174,16 +182,21 @@ cython_debug/
 !radiocovid-core/**/data
 /data
 
-# Entorno virtual
+# Intermediate test scripts
+check_wandb_acess.py
+temps_wandb_test.py
+wandb_run_inspect.py
+
+# Virtual environment
 .venv310/
 
-# Modelos y pesos
+# Model weights
 models/
 
-# Archivos DVC sensibles
+# Sensitive DVC files
 dvc-remote-*.json
 
-# Carpeta de inferencia local (si existe)
+# Local inference folder
 data/inference_images/
 
 simple_train/

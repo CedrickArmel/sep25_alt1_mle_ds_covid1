@@ -61,8 +61,7 @@ REPORTS = ROOT / "reports"
 if page == "Introduction & Problématique":
     st.title("📘 Introduction & Problématique")
 
-    st.markdown(
-        """
+    st.markdown("""
 ## 🎯 Objectif général
 
 Le projet **RadioCovid** vise à analyser automatiquement des radiographies pulmonaires
@@ -84,8 +83,7 @@ Les radiographies présentent :
 
 Ces éléments rendent indispensable un processus de **nettoyage**,
 **prétraitement**, **rééquilibrage** et **standardisation** avant l’entraînement du modèle.
-"""
-    )
+""")
 
 
 # -------------------------------------------------------------------
@@ -109,8 +107,7 @@ elif page == "EDA":
     else:
         st.info("Aucune figure trouvée dans reports/images.png")
 
-    st.markdown(
-        """
+    st.markdown("""
 Le dataset est très déséquilibré :
 
 - **Normal ~ 10 000**
@@ -119,8 +116,7 @@ Le dataset est très déséquilibré :
 - **Viral Pneumonia ~ 1 300**
 
 ➡️ Ce déséquilibre devra être corrigé au moment du rééquilibrage.
-"""
-    )
+""")
 
     # ----------------------------
     # PARTIE 2 — HARALICK
@@ -162,8 +158,7 @@ Le dataset est très déséquilibré :
         col2.image(current, caption=caption, use_container_width=True)
 
         # Explicación ligera
-        st.markdown(
-            """
+        st.markdown("""
     Les **caractéristiques de Haralick** (contrast, entropy, homogeneity, energy, correlation…)
     permettent d’analyser la **texture pulmonaire**.
 
@@ -172,8 +167,7 @@ Le dataset est très déséquilibré :
     - **Entropy** et **Homogeneity** sont fortement **corrélées négativement**.
     - Les images pathologiques présentent des textures **moins homogènes** que les normales.
     - La normalisation est essentielle avant l'entraînement.
-    """
-        )
+    """)
 
     # ----------------------------
     # PARTIE 3 — SYMÉTRIE & BORDS
@@ -182,8 +176,7 @@ Le dataset est très déséquilibré :
     # -------- 3️⃣ Analyse de l’aire pulmonaire (carrusel ciblé) --------
     st.header("3️⃣ Analyse de l’aire pulmonaire (asymétrie & bords)")
 
-    st.markdown(
-        """
+    st.markdown("""
     On calcule l’**indice d’asymétrie** entre poumon gauche et droit :
 
     \\[
@@ -194,8 +187,7 @@ Le dataset est très déséquilibré :
     - IA **élevé** → asymétrie marquée (potentiellement pathologique)
 
     Certaines images présentent aussi des **masques hors cadre** (poumons coupés ou collés aux bords) qui doivent être retirées.
-    """
-    )
+    """)
 
     # --- Carrusel simple con imágenes específicas: pulmon1,2,3,4,14 ---
     candidatos = [
@@ -237,13 +229,11 @@ Le dataset est très déséquilibré :
 
         # explicación mínima (ligero)
         with st.expander("📝 Interprétation (résumé)"):
-            st.markdown(
-                """
+            st.markdown("""
     - **Asymétrie** : IA élevé → dissymétrie entre poumons, souvent plus marquée dans les classes pathologiques.
     - **Masques hors cadre** : poumons coupés/au bord → échantillons à **exclure**.
     - Le nettoyage (retrait des outliers & masques invalides) **stabilise** le dataset pour l’entraînement.
-    """
-            )
+    """)
 # -------------------------------------------------------------------
 # 3) PREPROCESSING
 # -------------------------------------------------------------------
@@ -253,8 +243,7 @@ elif page == "Préprocessing":
     # --------- REMOVE OUTLIERS ---------
     st.header("1️⃣ Remove Outliers (clean.py)")
 
-    st.markdown(
-        """
+    st.markdown("""
 Le script **clean.py** supprime trois types d’outliers :
 
 ### 🔸 1. Masques **hors cadre**
@@ -273,8 +262,7 @@ Puis filtrage via **IQR** (Inter‑Quartile Range).
 
 
 ➡️ À la fin, on génère un **manifest.parquet** propre.
-"""
-    )
+""")
 
     # Lista fija de 6 imágenes + títulos en français
     images_outliers = [
@@ -324,8 +312,7 @@ Puis filtrage via **IQR** (Inter‑Quartile Range).
 
         # Explicación
         with st.expander("Résultat du retrait des outliers"):
-            st.markdown(
-                """
+            st.markdown("""
 
     #### 🔸 Outliers Haralick
 
@@ -333,8 +320,7 @@ Puis filtrage via **IQR** (Inter‑Quartile Range).
 
     #### 🔸 Outliers de bords
 
-    """
-            )
+    """)
 
     # =========================
     # PREPROCESSING — Sélecteur Binaire / Multiclasse
@@ -367,15 +353,13 @@ Puis filtrage via **IQR** (Inter‑Quartile Range).
     if mode.startswith("Mode Binaire"):
         st.subheader("🟦 Mode binaire : SAIN vs MALADE")
 
-        st.markdown(
-            """  Dans ce mode, le dataset est réduit à **2 classes** :
+        st.markdown("""  Dans ce mode, le dataset est réduit à **2 classes** :
 
     - **SAIN** = Normal
     - **MALADE** = COVID + Lung Opacity + Viral Pneumonia
 
     Ce choix permet de simplifier le problème et d'améliorer la détection globale de maladie.
-    """
-        )
+    """)
 
         # Mostrar números
         st.write("### 📊 Nombre d’images par classe")
@@ -394,8 +378,7 @@ Puis filtrage via **IQR** (Inter‑Quartile Range).
     else:
         st.subheader("🟩 Mode multiclasse : 3 pathologies")
 
-        st.markdown(
-            """
+        st.markdown("""
     Dans ce mode, le dataset conserve toutes les pathologies séparées :
 
     - **COVID**
@@ -404,8 +387,7 @@ Puis filtrage via **IQR** (Inter‑Quartile Range).
 
     Ce mode permet d’obtenir une classification plus fine,
     au prix d’un déséquilibre plus important entre classes.
-    """
-        )
+    """)
 
         # Mostrar números
         st.write("### 📊 Nombre d’images par classe")
@@ -435,8 +417,7 @@ elif page == "Architecture du modèle":
     st.header("1️⃣ Rééquilibrage du dataset")
 
     st.subheader("Distribution initiale (avant rééquilibrage)")
-    st.markdown(
-        """Voici le nombre d’images par catégorie avant tout traitement :
+    st.markdown("""Voici le nombre d’images par catégorie avant tout traitement :
 
 - **Normal** : 10 192
 - **Lung Opacity** : 6 012
@@ -444,8 +425,7 @@ elif page == "Architecture du modèle":
 - **Viral Pneumonia** : 1 345
 
 La classe *Normal* domine largement le dataset. Les classes pathologiques sont beaucoup plus petites.
-"""
-    )
+""")
 
     mode_rb = st.radio(
         "Sélectionner le type de rééquilibrage :",
@@ -476,8 +456,7 @@ Résultat dans le train set : le modèle voit pendant l’entraînement environ 
         )
     else:
         st.subheader("Mode Multiclasse (3 pathologies)")
-        st.markdown(
-            """
+        st.markdown("""
 Très fort déséquilibre : VP << COVID < LO << Normal.
 
 Toujours via le **WeightedRandomSampler**, mais cette fois par classe individuelle :
@@ -487,8 +466,7 @@ Toujours via le **WeightedRandomSampler**, mais cette fois par classe individuel
 - **Lung Opacity** → léger oversampling
 
 Résultat (pendant l’entraînement) : classes **équiprobables** (≈ 33% chacune).
-"""
-        )
+""")
 
     # =========================
     # 2️⃣ DÉCOUPAGE DES DONNÉES
@@ -509,16 +487,14 @@ Résultat (pendant l’entraînement) : classes **équiprobables** (≈ 33% chac
     # 3️⃣ TRANSFORMATIONS / DATA AUGMENTATION
     # =========================
     st.header("3️⃣ Transformations / Data Augmentation")
-    st.markdown(
-        """
+    st.markdown("""
 La **Data Augmentation** rend le modèle robuste aux conditions d’acquisition :
 
 - **Zoom in / out** : invariance d’échelle
 - **Luminosité** : radios claires/sombres
 - **Contraste** : qualité variable
 - **Normalisation** : stabilise et accélère l’apprentissage
-"""
-    )
+""")
 
     # Carrusel simple de transformations
     transfo_images = []
@@ -560,45 +536,35 @@ La **Data Augmentation** rend le modèle robuste aux conditions d’acquisition 
     st.header("4️⃣ Entraînement du modèle")
 
     with st.expander("1) Problème & choix de paradigme", expanded=False):
-        st.markdown(
-            """
+        st.markdown("""
 Problème de **classification d’images médicales** (radios).
 Paradigme : **CNN** → extraction automatique de motifs (contours, textures, structures pulmonaires).
-"""
-        )
+""")
 
     with st.expander("2) Organisation (Hydra + W&B)"):
-        st.markdown(
-            """
+        st.markdown("""
 **Hydra** : configuration modulaire (hyperparamètres, modèle, optimiseur, callbacks…) séparée du code.
 **W&B** : suivi d’expériences (métriques, paramètres, comparaisons) → traçabilité & reproductibilité.
-"""
-        )
+""")
 
     with st.expander("3) Modèles (Vanilla CNN & transfert learning)"):
-        st.markdown(
-            """
+        st.markdown("""
 - **Vanilla CNN** (from scratch) : blocs Conv→ReLU→Pool, classifieur fully‑connected (+ Dropout).
 - **Transfert learning** : **VGG / ResNet50 / RegNet_Y_128_GF/ VGG11** adaptés au contexte radiographique.
-"""
-        )
+""")
 
     with st.expander("4) Détails du Vanilla CNN"):
-        st.markdown(
-            """
+        st.markdown("""
 Entrée : **256×256, 3 canaux**.
 **Extracteur** (×3) : Conv2d (3→32→64→128, kernel 3×3, padding 1) + ReLU + MaxPool2d(2).
 **Classifieur** : Flatten → FC (+ **Dropout**), sortie en logits (binaire:2, multiclasse:K).
 **Cross‑Entropy Loss** (classes exclusives) : compare prédiction vs réalité (probabilités Softmax).
-"""
-        )
+""")
 
     with st.expander("5) Optimisateur"):
-        st.markdown(
-            """
+        st.markdown("""
 **Adam** : LR adaptatif, convergence rapide & stable, bonne robustesse pour CNN from scratch.
-"""
-        )
+""")
 
 
 # =========================
@@ -615,8 +581,7 @@ elif page == "Modèles":
     )
 
     with st.expander("🏆 RegNet_Y_128GF — très grande capacité (transfer learning)"):
-        st.markdown(
-            """
+        st.markdown("""
     **Poids** : `RegNet_Y_128GF_Weights.IMAGENET1K_SWAG_E2E_V1`
     **Acc@1 / Acc@5** : **88.228** / **98.682**
     **Paramètres** : **644.8 M**
@@ -633,12 +598,10 @@ elif page == "Modèles":
     **Trade‑offs**
     - ✅ Très haut plafond de performance
     - ❌ Coût mémoire/compute **très élevé**, latence plus longue
-    """
-        )
+    """)
 
     with st.expander("⭐ ResNet50 — standard robuste & efficace"):
-        st.markdown(
-            """
+        st.markdown("""
     **Poids** : `ResNet50_Weights.IMAGENET1K_V2`
     **Acc@1 / Acc@5** : **80.858** / **95.434**
     **Paramètres** : **25.6 M**
@@ -655,12 +618,10 @@ elif page == "Modèles":
     **Trade‑offs**
     - ✅ Robuste, facile à fine‑tuner, rapide
     - ❌ Moins performante que des modèles **très grands** (RegNet géants, etc.)
-    """
-        )
+    """)
 
     with st.expander("🧱 VGG11_BN — simple & stable (batch norm)"):
-        st.markdown(
-            """
+        st.markdown("""
     **Poids** : `VGG11_BN_Weights.IMAGENET1K_V1`
     **Acc@1 / Acc@5** : **70.37** / **89.81**
     **Paramètres** : **132.9 M**
@@ -677,12 +638,10 @@ elif page == "Modèles":
     **Trade‑offs**
     - ✅ Simplicidad, estabilidad (BN)
     - ❌ **Muchos parámetros** para la precisión que ofrece; puede ser más lento que ResNet50 para igual rendimiento
-    """
-        )
+    """)
 
     with st.expander("🧱 VGG11 — baseline simple (sans BN)"):
-        st.markdown(
-            """
+        st.markdown("""
     **Poids** : `VGG11_Weights.IMAGENET1K_V1`
     **Acc@1 / Acc@5** : **69.02** / **88.628**
     **Paramètres** : **132.9 M**
@@ -698,12 +657,10 @@ elif page == "Modèles":
     **Trade‑offs**
     - ✅ Très simple de compréhension
     - ❌ **Moins stable** que VGG11_BN, **beaucoup** de paramètres pour une performance **modeste**
-    """
-        )
+    """)
 
     with st.expander("🧪 VanillaCNN — modèle from‑scratch (projet)"):
-        st.markdown(
-            """
+        st.markdown("""
     **Poids** : _(non pré‑entraîné)_
     **Acc@1 / Acc@5** : _(non applicable en ImageNet)_
     **Paramètres** : **~16 M** (ordre de grandeur)
@@ -720,8 +677,7 @@ elif page == "Modèles":
     **Trade‑offs**
     - ✅ Totalement configurable, transparent
     - ❌ Sans pré‑entraînement, nécessite **plus de données** / **data aug** pour rivaliser avec transfer learning
-    """
-        )
+    """)
 
     st.subheader("🔗 Tableau de bord des expériences (Weights & Biases)")
 
@@ -741,8 +697,7 @@ elif page == "Modèles":
                 unsafe_allow_html=True,
             )
 
-    st.markdown(
-        """
+    st.markdown("""
 Le rapport W&B présente l'historique complet des entraînements :
 - courbes de loss / accuracy
 - évolution des métriques
@@ -751,8 +706,7 @@ Le rapport W&B présente l'historique complet des entraînements :
 - checkpoints sauvegardés
 
 Idéal pour analyser finement les performances du modèle.
-"""
-    )
+""")
 
 # =========================
 # 7) PRÉDICTION — Version démo
@@ -760,13 +714,11 @@ Idéal pour analyser finement les performances du modèle.
 elif page == "Prédiction":
     st.title("🔮 Prédiction sur une radiographie")
 
-    st.markdown(
-        """
+    st.markdown("""
 Cette section permet de tester la prédiction sur une image importée.
 
 
-"""
-    )
+""")
 
     # ----- Upload d'image -----
     st.subheader("📤 Importer une radiographie")
@@ -798,8 +750,7 @@ Cette section permet de tester la prédiction sur une image importée.
             # Image fournie → COVID 82%
             st.success("Prédiction réalisée (version démo)")
 
-    st.markdown(
-        """
+    st.markdown("""
 ---
 👉 Lorsque le modèle final sera disponible, cette section permettra :
 - le pré‑traitement automatique de la radiographie
@@ -807,8 +758,7 @@ Cette section permet de tester la prédiction sur une image importée.
 - la prédiction réelle
 - l’affichage des probabilités
 - éventuellement une heatmap **Grad‑CAM**
-"""
-    )
+""")
 
     # =========================
 # 8) CONCLUSION & DISCUSSION
@@ -816,8 +766,7 @@ Cette section permet de tester la prédiction sur une image importée.
 elif page == "Conclusion":
     st.title("🔚 Conclusion & Discussion")
 
-    st.markdown(
-        """
+    st.markdown("""
 ## 🧾 Conclusion générale
 
 Ce projet a permis de construire un pipeline complet de **classification de radiographies pulmonaires**,
@@ -875,5 +824,4 @@ grâce à une combinaison de :
 
 Il constitue un point de départ solide pour aller vers des modèles plus
 performants, plus interprétables et plus adaptés au contexte clinique réel.
-"""
-    )
+""")
