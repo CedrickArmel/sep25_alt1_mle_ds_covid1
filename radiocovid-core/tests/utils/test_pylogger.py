@@ -24,7 +24,6 @@ import logging
 
 import pytest
 from lightning_utilities.core.rank_zero import rank_zero_only as rzo
-
 from radiocovid.core.utils.pylogger import RankedLogger
 
 # --------------------------------------------------------------------------- #

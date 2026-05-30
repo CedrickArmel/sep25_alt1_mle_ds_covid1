@@ -23,11 +23,10 @@
 from functools import partial
 from unittest.mock import MagicMock
 
-from torch.utils.data import DataLoader
-from torchvision.datasets.folder import default_loader
-
 from radiocovid.core.data.datamodule import DataModule
 from radiocovid.core.data.datasets import RadioCovidDataset
+from torch.utils.data import DataLoader
+from torchvision.datasets.folder import default_loader
 
 
 def _make_dm(root, test_size=0.34, val_size=0.5):
