@@ -123,6 +123,34 @@ Raw X-ray images
 
 > **Host bootstrap (optional):** The `Makefile` provides `make cpusetup`, `make gpusetup`, and `make tpusetup` targets that install `pyenv`, `uv`, and the relevant environment variables for CPU, GPU (CUDA), or TPU runs respectively. You only need these if you are setting up a fresh machine.
 
+### Dev container (recommended)
+
+Use a dev container when you want the **same Linux environment** on Windows, macOS, or Linux without installing Python and system libraries by hand. Your project files stay on your machine; only the tools (Python, `uv`, OpenCV libs, etc.) run inside Docker.
+
+| Requirement | Notes |
+|---|---|
+| [Docker Desktop](https://www.docker.com/products/docker-desktop/) | Must be running before opening the container |
+| **Dev Containers** extension | **Cursor:** install **Dev Containers** by **Anysphere** (`anysphere.remote-containers`). **VS Code:** install **Dev Containers** by Microsoft. Do **not** rely on **Container Tools** alone — it does not open the project in a dev container. |
+
+**First-time setup:**
+
+1. Clone this repo and open the **repository root** in Cursor or VS Code.
+2. Command Palette → **Dev Containers: Rebuild and Reopen in Container** (first run only; later use *Reopen in Container*).
+3. Wait for the post-create step to finish (`uv sync --all-groups` and `pre-commit install`). The first build can take **10–20 minutes** (PyTorch and dependencies).
+4. Optional: copy `.env.example` to `.env` and set `WANDB_API_KEY` if you need online Weights & Biases logging. The container defaults to `WANDB_MODE=offline`.
+
+**Quick check** (inside the container terminal):
+
+```shell
+python --version          # Python 3.10.x
+uv run python -c "import torch; print(torch.__version__)"
+uv run pytest radiocovid-core/tests/test_imports.py -q
+```
+
+Configuration lives in `.devcontainer/` (`Dockerfile` + `devcontainer.json`). **Git** (`commit`, `push`) works the same as on your host: the repo is mounted into the container, not copied.
+
+To leave the container: **Dev Containers: Reopen Folder Locally**.
+
 ---
 
 ### Step 1 — Clone and install
