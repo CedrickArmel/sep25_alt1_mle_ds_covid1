@@ -24,7 +24,6 @@ from unittest.mock import MagicMock
 
 import pytest
 from omegaconf import OmegaConf
-
 from radiocovid.core.utils.rich_utils import enforce_tags, print_config_tree
 
 # --------------------------------------------------------------------------- #

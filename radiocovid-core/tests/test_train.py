@@ -23,7 +23,6 @@
 from unittest.mock import MagicMock
 
 from omegaconf import OmegaConf
-
 from radiocovid.core.train import train
 
 _MINIMAL_CFG = {

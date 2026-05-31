@@ -24,13 +24,12 @@ from hashlib import sha256
 
 import pytest
 import torch
-from torchvision.datasets.folder import default_loader
-
 from radiocovid.core.data.datasets import (
     RadioCovidDataset,
     RadioCovidSubset,
     get_label_from_sample,
 )
+from torchvision.datasets.folder import default_loader
 
 # --------------------------------------------------------------------------- #
 # get_label_from_sample                                                        #
