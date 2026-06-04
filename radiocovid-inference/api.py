@@ -1,41 +1,67 @@
-from fastapi import FastAPI, File, UploadFile
-from PIL import Image
+from contextlib import asynccontextmanager
 import io
 
-from predict import load_model, get_transform, predict_image
+from dotenv import load_dotenv
+from fastapi import FastAPI, File, HTTPException, UploadFile
+from PIL import Image
 
-app = FastAPI()
+load_dotenv()
 
-# variables globales (vacías al inicio)
-model = None
-device = None
-transform = None
+from predict import get_transform, load_model
+from predict import predict as run_predict
+
+_state: dict = {}
 
 
-@app.on_event("startup")
-def load_everything():
-    global model, device, transform
-    print("Loading model...")
+def _load_into_state():
+    model, device, meta = load_model()
+    _state["model"] = model
+    _state["device"] = device
+    _state["transform"] = get_transform()
+    _state["info"] = meta
 
-    model, device = load_model()
-    transform = get_transform()
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("Loading model from W&B...")
+    _load_into_state()
     print("Model loaded ✅")
+    yield
+    _state.clear()
 
 
-@app.get("/")
-def home():
-    return {"message": "Radiocovid API running ✅"}
+app = FastAPI(lifespan=lifespan)
+
+
+@app.get("/health")
+def health():
+    if not _state:
+        raise HTTPException(status_code=503, detail="Model not loaded")
+    return {"status": "ok"}
+
+
+@app.get("/info")
+def info():
+    if not _state:
+        raise HTTPException(status_code=503, detail="Model not loaded")
+    return _state["info"]
+
+
+@app.post("/reload")
+def reload():
+    print("Reloading model from W&B...")
+    _load_into_state()
+    print("Model reloaded ✅")
+    return {"status": "reloaded", **_state["info"]}
 
 
 @app.post("/predict")
-async def predict(file: UploadFile = File(...)):
+async def predict_endpoint(file: UploadFile = File(...)):
     contents = await file.read()
     image = Image.open(io.BytesIO(contents)).convert("RGB")
 
-    label, confidence = predict_image(model, image, transform, device)
+    label, confidence = run_predict(
+        _state["model"], image, _state["transform"], _state["device"]
+    )
 
-    return {
-        "label": label,
-        "probability": round(confidence, 4)
-    }
+    return {"label": label, "probability": round(confidence, 4)}
