@@ -22,18 +22,17 @@
 # SOFTWARE.
 
 import glob
-import json
 import os
 import re
 from pathlib import Path
+from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
 import streamlit as st
-import yaml
-from PIL import Image
+import yaml  # type: ignore[import-untyped]
 
 # =========================
 # CONFIG APP
@@ -100,7 +99,7 @@ def find_haralick_dumps(dumps_dir: Path):
     Cherche fichiers: haralick_features_{feature}_{rep}.npy
     Retourne: dict[feature][rep] -> np.ndarray
     """
-    results = {}
+    results: dict[str, Any] = {}
     if not dumps_dir.exists():
         return results
     files = sorted(dumps_dir.glob("haralick_features_*_*.npy"))
@@ -443,7 +442,7 @@ if page == "EDA":
 
         # Muestra una sola figura con caption y ratio
         current = harlick_figs[idx]
-        caption = f"{current.stem.replace('_',' ').capitalize()}  ({pos}/{n})"
+        caption = f"{current.stem.replace('_', ' ').capitalize()}  ({pos}/{n})"
         col_img.image(str(current), caption=caption, use_container_width=True)
 
         with st.expander("📝 Interprétation (résumé)"):

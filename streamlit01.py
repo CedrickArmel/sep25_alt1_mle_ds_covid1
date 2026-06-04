@@ -153,7 +153,7 @@ Le dataset est très déséquilibré :
 
         # Imagen actual del carrusel
         current = harlick_figs[st.session_state["harlick_pos"]]
-        caption = f"{Path(current).stem}  ({st.session_state['harlick_pos']+1}/{n})"
+        caption = f"{Path(current).stem}  ({st.session_state['harlick_pos'] + 1}/{n})"
 
         col2.image(current, caption=caption, use_container_width=True)
 
@@ -223,7 +223,7 @@ Le dataset est très déséquilibré :
 
         idx = st.session_state[key]
         current = pulmon_figs[idx]
-        caption = f"{current.stem}  ({idx+1}/{n})"
+        caption = f"{current.stem}  ({idx + 1}/{n})"
 
         col_img.image(str(current), caption=caption, use_container_width=True)
 
@@ -307,7 +307,7 @@ Puis filtrage via **IQR** (Inter‑Quartile Range).
         # Mostrar imagen actual
         idx = st.session_state[key]
         img_path, title = files[idx]
-        caption = f"{title} ({idx+1}/{n})"
+        caption = f"{title} ({idx + 1}/{n})"
         col_img.image(str(img_path), caption=caption, use_container_width=True)
 
         # Explicación
@@ -527,7 +527,7 @@ La **Data Augmentation** rend le modèle robuste aux conditions d’acquisition 
         i = st.session_state["transfo_idx_arch"]
         img_path, title = transfo_images[i]
         cimg.image(
-            str(img_path), caption=f"{title}  ({i+1}/{n})", use_container_width=True
+            str(img_path), caption=f"{title}  ({i + 1}/{n})", use_container_width=True
         )
 
     # =========================

@@ -22,7 +22,6 @@
 
 import torch.nn as nn
 from omegaconf import OmegaConf
-
 from radiocovid.core.utils.logging_utils import log_hyperparameters
 
 
