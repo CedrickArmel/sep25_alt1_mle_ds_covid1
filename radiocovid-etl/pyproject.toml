@@ -58,4 +58,3 @@ module-name = "radiocovid.etl"
 
 [tool.uv.sources]
 radiocovid-core = { workspace = true }
-
