@@ -51,11 +51,13 @@ Raw X-ray images
 |---|---|
 | `radiocovid-core/` | Modeling library — datamodule, VGG-11 backbone, focal loss, training loop |
 | `radiocovid-etl/` | Data preparation — outlier removal (Haralick GLCM), ImageFolder builder |
+| `docker/` | Dockerfiles and entrypoint scripts for each pipeline stage |
 | `data/` | Raw and processed X-ray images (tracked by DVC, stored on Google Drive) |
 | `models/` | Saved model checkpoints |
 | `notebooks/` | Exploratory data analysis notebooks |
 | `references/` | Research paper that informs the modeling choices |
 | `reports/` | Generated figures and reports |
+| `docker-compose.yml` | Orchestrates all containerised pipeline stages |
 
 ```text
 ├── data.dvc
@@ -137,7 +139,7 @@ Use a dev container when you want the **same Linux environment** on Windows, mac
 1. Clone this repo and open the **repository root** in Cursor or VS Code.
 2. Command Palette → **Dev Containers: Rebuild and Reopen in Container** (first run only; later use *Reopen in Container*).
 3. Wait for the post-create step to finish (`uv sync --all-groups` and `pre-commit install`). The first build can take **10–20 minutes** (PyTorch and dependencies).
-4. Optional: copy `.env.example` to `.env` and set `WANDB_API_KEY` if you need online Weights & Biases logging. The container defaults to `WANDB_MODE=offline`.
+4. Optional: set `WANDB_API_KEY` in your shell environment if you need online Weights & Biases logging. The container defaults to `WANDB_MODE=offline`.
 
 **Quick check** (inside the container terminal):
 
@@ -311,6 +313,81 @@ Key config groups:
 | `callbacks` | `early_stopping`, `model_checkpoint` |
 
 Override any value with `foo.bar=value`. For repeatable experiments, create a YAML file under `radiocovid-core/src/radiocovid/core/configs/experiment/` and load it with `experiment=your_experiment_name`.
+
+---
+
+## Running with Docker
+
+The pipeline can be run without installing Python or any dependencies locally — everything runs inside Docker containers orchestrated by Docker Compose.
+
+### Prerequisites
+
+| Tool | Version | Install |
+|---|---|---|
+| [Docker Desktop](https://www.docker.com/products/docker-desktop/) | latest | Must be running |
+
+### Pipeline stages
+
+| Compose profile | What it runs | Default model |
+|---|---|---|
+| `etl` | `radiocovid-clean` → `radiocovid-train-folder` | — |
+| `train` | `radiocovid-train` | ResNet50 binary |
+
+### Step 1 — Fetch the data
+
+The dataset must be fetched with DVC before running any container (see [Step 2](#step-2--fetch-the-data) in the vanilla run section above).
+
+### Step 2 — Configure W&B (optional)
+
+Training logs metrics to Weights & Biases. By default it runs in **offline mode** (no account needed). To enable online logging:
+
+```shell
+cp .env.example .env
+# Edit .env and paste your W&B API key
+```
+
+The `.env` file is git-ignored — each developer keeps their own locally.
+
+### Step 3 — Run the ETL
+
+```shell
+docker compose --profile etl up
+```
+
+This will:
+1. Build the `radiocovid-etl:0.1.0` image on first run (subsequent runs reuse the cached image)
+2. Clean the raw images from `./data/01_raw/` and write `./data/manifest.parquet`
+3. Build the training folder structure under `./data/train_folder/`
+
+The container exits automatically when both steps complete. Your `./data/` folder is mounted into the container — outputs are written directly to your machine.
+
+### Step 4 — Run the training
+
+```shell
+docker compose --profile train up
+```
+
+This trains a ResNet50 binary classifier by default. Checkpoints are saved to `./models/` and logs to `./logs/`.
+
+To override any Hydra config parameter:
+
+```shell
+# Different experiment
+docker compose --profile train run train experiment=train_resnet50_binary_2
+
+# Custom hyperparameters
+docker compose --profile train run train \
+  module/optimizer=sgd \
+  module/scheduler=cosine \
+  trainer.max_epochs=50
+```
+
+### Rebuilding an image after a package update
+
+```shell
+docker compose --profile etl build && docker compose --profile etl up
+docker compose --profile train build && docker compose --profile train up
+```
 
 ---
 
