@@ -32,10 +32,9 @@ from radiocovid.core.utils import (
     RankedLogger,
     get_seeded_generator,
     seed_worker,
-    worker_balanced_n_samples,
 )
 from sklearn.model_selection import train_test_split
-from torch.utils.data import DataLoader, WeightedRandomSampler
+from torch.utils.data import DataLoader
 from torchvision.transforms.v2 import Transform
 
 from .datasets import DistributedWeightedSampler, PaddedShardedSampler, RadioCovidSubset
