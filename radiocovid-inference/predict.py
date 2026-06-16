@@ -77,7 +77,11 @@ def _best_run_artifact(entity: str, project: str):
     """Connect to W&B, find the run with the best validation metric,
     and return (artifact, metadata). Raises RuntimeError if nothing is found."""
     import wandb
-    from wandb_download_ckpt import choose_metric, download_artifact, find_model_artifact
+    from wandb_download_ckpt import (
+        choose_metric,
+        download_artifact,
+        find_model_artifact,
+    )
 
     api = wandb.Api()
     runs = list(api.runs(f"{entity}/{project}"))
