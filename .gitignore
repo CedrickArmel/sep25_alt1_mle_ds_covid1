@@ -200,3 +200,4 @@ dvc-remote-*.json
 data/inference_images/
 
 simple_train/
+artifacts/
