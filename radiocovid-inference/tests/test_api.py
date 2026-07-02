@@ -23,16 +23,15 @@
 import io
 from unittest.mock import patch
 
+import api as _api_module
 import numpy as np
 import pytest
 import torch
 import torch.nn as nn
+from api import app
 from fastapi.testclient import TestClient
 from PIL import Image
 from torchvision import transforms
-
-import api as _api_module
-from api import app
 
 _META = {
     "run_id": "run_test",
@@ -134,7 +133,10 @@ class TestInfoEndpoint:
 class TestReloadEndpoint:
     def test_returns_reloaded_status(self, client):
         with (
-            patch("api.load_model", return_value=(_FixedModel(), torch.device("cpu"), _META)),
+            patch(
+                "api.load_model",
+                return_value=(_FixedModel(), torch.device("cpu"), _META),
+            ),
             patch("api.get_transform", return_value=_basic_transform()),
         ):
             resp = client.post("/reload")
@@ -144,7 +146,10 @@ class TestReloadEndpoint:
     def test_reload_repopulates_meta(self, client):
         updated_meta = {**_META, "run_id": "run_updated", "metric_value": 0.99}
         with (
-            patch("api.load_model", return_value=(_FixedModel(), torch.device("cpu"), updated_meta)),
+            patch(
+                "api.load_model",
+                return_value=(_FixedModel(), torch.device("cpu"), updated_meta),
+            ),
             patch("api.get_transform", return_value=_basic_transform()),
         ):
             resp = client.post("/reload")
@@ -158,23 +163,30 @@ class TestReloadEndpoint:
 
 class TestPredictEndpoint:
     def test_returns_label_and_probability(self, client, png_bytes):
-        resp = client.post("/predict", files={"file": ("img.png", png_bytes, "image/png")})
+        resp = client.post(
+            "/predict", files={"file": ("img.png", png_bytes, "image/png")}
+        )
         assert resp.status_code == 200
         body = resp.json()
         assert "label" in body
         assert "probability" in body
 
     def test_label_is_valid_class(self, client, png_bytes):
-        resp = client.post("/predict", files={"file": ("img.png", png_bytes, "image/png")})
+        resp = client.post(
+            "/predict", files={"file": ("img.png", png_bytes, "image/png")}
+        )
         assert resp.json()["label"] in ["NORMAL", "ABNORMAL"]
 
     def test_probability_in_unit_interval(self, client, png_bytes):
-        resp = client.post("/predict", files={"file": ("img.png", png_bytes, "image/png")})
+        resp = client.post(
+            "/predict", files={"file": ("img.png", png_bytes, "image/png")}
+        )
         prob = resp.json()["probability"]
         assert 0.0 <= prob <= 1.0
 
     def test_returns_400_for_invalid_image(self, client):
         resp = client.post(
-            "/predict", files={"file": ("bad.bin", b"not-an-image", "application/octet-stream")}
+            "/predict",
+            files={"file": ("bad.bin", b"not-an-image", "application/octet-stream")},
         )
         assert resp.status_code == 400
