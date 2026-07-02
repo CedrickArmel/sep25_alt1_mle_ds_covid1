@@ -30,3 +30,17 @@ services:
       WANDB_API_KEY: ${WANDB_API_KEY:-}
     profiles:
       - train
+
+  inference:
+    build:
+      context: .
+      dockerfile: docker/inference/Dockerfile
+    image: radiocovid-inference:0.1.0
+    ports:
+      - "8000:8000"
+    environment:
+      WANDB_API_KEY: ${WANDB_API_KEY:-}
+      WANDB_ENTITY: ${WANDB_ENTITY:-}
+      WANDB_PROJECT: ${WANDB_PROJECT:-radiocovid}
+    profiles:
+      - inference
