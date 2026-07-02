@@ -79,7 +79,10 @@ def reload():
 @app.post("/predict")
 async def predict_endpoint(file: UploadFile = File(...)):
     contents = await file.read()
-    image = Image.open(io.BytesIO(contents)).convert("RGB")
+    try:
+        image = Image.open(io.BytesIO(contents)).convert("RGB")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Imagen inválida")
 
     label, confidence = run_predict(
         _state["model"], image, _state["transform"], _state["device"]

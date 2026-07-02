@@ -22,7 +22,7 @@
 
 import torch
 import torch.nn as nn
-from predict import CLASSES, build_model, load_checkpoint
+from predict import CLASSES, build_model, get_transform, load_checkpoint
 from predict import predict as run_predict
 from torchvision import transforms
 
@@ -109,3 +109,39 @@ class TestPredict:
         model = build_model(num_classes=len(CLASSES), device=torch.device("cpu"))
         label, _ = run_predict(model, tmp_png, self._transform(), torch.device("cpu"))
         assert label in CLASSES
+
+    def test_accepts_pil_image_directly(self, tmp_png):
+        from PIL import Image as PilImage
+
+        img = PilImage.open(tmp_png).convert("RGB")
+        model = build_model(num_classes=len(CLASSES), device=torch.device("cpu"))
+        label, confidence = run_predict(
+            model, img, self._transform(), torch.device("cpu")
+        )
+        assert label in CLASSES
+        assert 0.0 <= confidence <= 1.0
+
+
+# --------------------------------------------------------------------------- #
+# get_transform                                                                #
+# --------------------------------------------------------------------------- #
+
+
+class TestGetTransform:
+    def test_returns_compose(self):
+        assert isinstance(get_transform(), transforms.Compose)
+
+    def test_output_is_float_tensor(self, tmp_png):
+        from PIL import Image as PilImage
+
+        img = PilImage.open(tmp_png).convert("RGB")
+        out = get_transform()(img)
+        assert isinstance(out, torch.Tensor)
+        assert out.dtype == torch.float32
+
+    def test_output_has_three_channels(self, tmp_png):
+        from PIL import Image as PilImage
+
+        img = PilImage.open(tmp_png).convert("RGB")
+        out = get_transform()(img)
+        assert out.shape[0] == 3
