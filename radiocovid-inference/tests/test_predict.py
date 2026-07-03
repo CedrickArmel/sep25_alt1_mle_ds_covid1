@@ -115,7 +115,9 @@ class TestPredict:
 
         img = PilImage.open(tmp_png).convert("RGB")
         model = build_model(num_classes=len(CLASSES), device=torch.device("cpu"))
-        label, confidence = run_predict(model, img, self._transform(), torch.device("cpu"))
+        label, confidence = run_predict(
+            model, img, self._transform(), torch.device("cpu")
+        )
         assert label in CLASSES
         assert 0.0 <= confidence <= 1.0
 

@@ -2,7 +2,7 @@
 set -e
 
 # Valeurs par défaut — surchargées via variables d'environnement dans docker-compose
-: "${DATA_DIR:=/data/01_raw}"
+: "${DATA_DIR:=/data/01_raw/COVID-19_Radiography_Dataset}"
 : "${MANIFEST_PATH:=/data/manifest.parquet}"
 : "${TRAIN_FOLDER_DIR:=/data/train_folder}"
 
