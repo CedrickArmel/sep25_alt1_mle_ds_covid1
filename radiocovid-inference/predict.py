@@ -104,7 +104,8 @@ def load_model():
 
     api = wandb.Api()
 
-    artifact = fetch_production_model(api, entity, registered_model_name)
+    collection_name = os.environ.get("WANDB_REGISTRY_COLLECTION", registered_model_name)
+    artifact = fetch_production_model(api, registered_model_name, collection_name)
     if artifact is not None:
         logger.info(f"Loading production model from registry '{registered_model_name}:production'")
         meta = {

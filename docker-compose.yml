@@ -43,5 +43,6 @@ services:
       WANDB_ENTITY: ${WANDB_ENTITY:-}
       WANDB_PROJECT: ${WANDB_PROJECT:-radiocovid}
       WANDB_REGISTERED_MODEL_NAME: ${WANDB_REGISTERED_MODEL_NAME:-radiocovid-classifier}
+      WANDB_REGISTRY_COLLECTION: ${WANDB_REGISTRY_COLLECTION:-radiocovid-classifier}
     profiles:
       - inference

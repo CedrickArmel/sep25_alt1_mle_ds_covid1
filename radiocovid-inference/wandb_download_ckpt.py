@@ -46,13 +46,17 @@ def choose_metric(runs: list) -> str | None:
     return None
 
 
-def fetch_production_model(api: Any, entity: str, registered_model_name: str):
-    """Fetch the artifact tagged 'production' from the W&B Model Registry.
+def fetch_production_model(api: Any, registered_model_name: str, collection_name: str):
+    """Fetch the artifact tagged 'production' from the W&B Registry.
+
+    The path format for W&B Registry is:
+    wandb-registry-{registry_name}/{collection_name}:production
 
     Returns the artifact or None if not found.
     """
     try:
-        return api.artifact(f"{entity}/model-registry/{registered_model_name}:production")
+        path = f"wandb-registry-{registered_model_name}/{collection_name}:production"
+        return api.artifact(path)
     except Exception:
         return None
 
