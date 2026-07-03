@@ -28,6 +28,7 @@ import hydra
 from dotenv import load_dotenv
 from lightning import Callback, LightningDataModule, LightningModule, Trainer
 from lightning.pytorch.loggers import Logger
+from lightning.pytorch.loggers import WandbLogger
 from omegaconf import DictConfig
 from radiocovid.core.utils import (
     RankedLogger,
@@ -42,6 +43,27 @@ from radiocovid.core.utils import (
 load_dotenv()
 
 log = RankedLogger(__name__, rank_zero_only=True)
+
+
+def _link_to_registry(loggers: List[Logger], cfg: DictConfig) -> None:
+    """Link the best model artifact logged during training to the W&B Model Registry
+    with the alias 'challenger', ready for a human to promote to 'production'."""
+    registered_model_name = cfg.get("wandb_registered_model_name", "radiocovid-classifier")
+
+    for logger in loggers:
+        if not isinstance(logger, WandbLogger):
+            continue
+        run = logger.experiment
+        for artifact in run.logged_artifacts():
+            if artifact.type == "model":
+                target = f"{run.entity}/model-registry/{registered_model_name}"
+                run.link_artifact(artifact, target, aliases=["challenger"])
+                log.info(
+                    f"Model artifact linked to registry '{registered_model_name}' "
+                    f"with alias 'challenger' — promote to 'production' in the W&B UI."
+                )
+                break
+        break
 
 
 @task_wrapper
@@ -94,6 +116,9 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         trainer.fit(model=model, datamodule=datamodule, ckpt_path=cfg.get("ckpt_path"))
 
     train_metrics = trainer.callback_metrics
+
+    if cfg.get("train"):
+        _link_to_registry(loggers, cfg)
 
     if cfg.get("test"):
         log.info("Starting testing!")
