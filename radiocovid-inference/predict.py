@@ -95,16 +95,37 @@ def _best_run_artifact(entity: str, project: str):
 # API HELPERS ✅
 # -------------------------------
 def load_model():
+    import wandb
+    from wandb_download_ckpt import fetch_production_model
+
     entity = os.environ.get("WANDB_ENTITY", "yebouetc")
     project = os.environ.get("WANDB_PROJECT", "radiocovid")
+    registered_model_name = os.environ.get("WANDB_REGISTERED_MODEL_NAME", "radiocovid-classifier")
 
-    logger.info(f"Fetching best model from W&B: {entity}/{project}")
-    artifact, meta = _best_run_artifact(entity, project)
+    api = wandb.Api()
+
+    artifact = fetch_production_model(api, entity, registered_model_name)
+    if artifact is not None:
+        logger.info(f"Loading production model from registry '{registered_model_name}:production'")
+        meta = {
+            "registered_model": registered_model_name,
+            "alias": "production",
+            "version": artifact.version,
+            "entity": entity,
+            "project": project,
+            "classes": CLASSES,
+        }
+    else:
+        logger.warning(
+            f"No 'production' model found in registry '{registered_model_name}'. "
+            "Falling back to best run by metric."
+        )
+        artifact, meta = _best_run_artifact(entity, project)
 
     artifact_dir = Path(artifact.download())
     ckpt_files = list(artifact_dir.glob("*.ckpt"))
     if not ckpt_files:
-        raise RuntimeError(f"No .ckpt file found in artifact for run {meta['run_id']}")
+        raise RuntimeError(f"No .ckpt file found in downloaded artifact")
 
     checkpoint_path = ckpt_files[0]
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

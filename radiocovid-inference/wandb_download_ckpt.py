@@ -46,6 +46,17 @@ def choose_metric(runs: list) -> str | None:
     return None
 
 
+def fetch_production_model(api: Any, entity: str, registered_model_name: str):
+    """Fetch the artifact tagged 'production' from the W&B Model Registry.
+
+    Returns the artifact or None if not found.
+    """
+    try:
+        return api.artifact(f"{entity}/model-registry/{registered_model_name}:production")
+    except Exception:
+        return None
+
+
 def download_artifact(api: Any, org: str, proj: str, run_id: str):
     """Try to fetch the model artifact for *run_id* using known aliases.
 
