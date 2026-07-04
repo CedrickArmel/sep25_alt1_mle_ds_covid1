@@ -25,14 +25,13 @@ from unittest.mock import patch
 
 import numpy as np
 import pytest
+import radiocovid.inference.api as _api_module
 import torch
 import torch.nn as nn
 from fastapi.testclient import TestClient
 from PIL import Image
-from torchvision import transforms
-
-import radiocovid.inference.api as _api_module
 from radiocovid.inference.api import app
+from torchvision import transforms
 
 _META = {
     "run_id": "5mr8ud16",

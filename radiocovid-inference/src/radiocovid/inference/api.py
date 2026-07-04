@@ -26,7 +26,6 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from PIL import Image
-
 from radiocovid.inference.predict import get_transform, load_model
 from radiocovid.inference.predict import predict as run_predict
 

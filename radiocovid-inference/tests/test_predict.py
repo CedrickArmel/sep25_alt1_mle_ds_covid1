@@ -22,8 +22,6 @@
 
 import torch
 import torch.nn as nn
-from torchvision import transforms
-
 from radiocovid.inference.predict import (
     CLASSES,
     build_model,
@@ -31,6 +29,7 @@ from radiocovid.inference.predict import (
     load_checkpoint,
 )
 from radiocovid.inference.predict import predict as run_predict
+from torchvision import transforms
 
 # --------------------------------------------------------------------------- #
 # build_model                                                                  #
@@ -136,7 +135,6 @@ class TestPredict:
 class TestRegistryArtifact:
     def test_fetches_artifact_from_registry_path(self, monkeypatch):
         import wandb
-
         from radiocovid.inference import predict as predict_module
 
         class FakeArtifact:
