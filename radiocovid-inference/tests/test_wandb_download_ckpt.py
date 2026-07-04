@@ -25,6 +25,7 @@ from unittest.mock import MagicMock
 from radiocovid.inference.wandb_download_ckpt import (
     choose_metric,
     download_artifact,
+    fetch_production_model,
     find_model_artifact,
 )
 
@@ -154,3 +155,40 @@ class TestDownloadArtifact:
         assert "run_xyz" in called_path
         assert "myorg" in called_path
         assert "myproj" in called_path
+
+
+# --------------------------------------------------------------------------- #
+# fetch_production_model                                                       #
+# --------------------------------------------------------------------------- #
+
+
+class TestFetchProductionModel:
+    def test_returns_artifact_from_registry(self):
+        artifact = MagicMock()
+        api = MagicMock()
+        api.artifact.return_value = artifact
+        result = fetch_production_model(
+            api, "radiocovid-classifier", "radiocovid-classifier"
+        )
+        assert result is artifact
+        called_path = api.artifact.call_args[0][0]
+        assert "wandb-registry-radiocovid-classifier" in called_path
+        assert "production" in called_path
+
+    def test_path_uses_registry_prefix(self):
+        api = MagicMock()
+        api.artifact.return_value = MagicMock()
+        fetch_production_model(api, "radiocovid-classifier", "my-collection")
+        called_path = api.artifact.call_args[0][0]
+        assert (
+            called_path
+            == "wandb-registry-radiocovid-classifier/my-collection:production"
+        )
+
+    def test_returns_none_when_registry_raises(self):
+        api = MagicMock()
+        api.artifact.side_effect = Exception("not found")
+        result = fetch_production_model(
+            api, "radiocovid-classifier", "radiocovid-classifier"
+        )
+        assert result is None

@@ -56,3 +56,88 @@ services:
       WANDB_REGISTRY_SOURCE_PROJECT: ${WANDB_REGISTRY_SOURCE_PROJECT:-radiocovid}
     profiles:
       - inference
+
+  # ---------------------------------------------------------------------------
+  # Airflow — orchestration (ETL + Train)
+  # ---------------------------------------------------------------------------
+
+  airflow-postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+    profiles:
+      - airflow
+
+  airflow-init:
+    build:
+      context: docker/airflow
+      dockerfile: Dockerfile
+    image: radiocovid-airflow:2.9.2
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    volumes:
+      - ./dags:/opt/airflow/dags
+    command: >
+      bash -c "airflow db migrate &&
+               airflow users create
+                 --username admin --password admin
+                 --firstname Admin --lastname User
+                 --role Admin --email admin@radiocovid.com"
+    profiles:
+      - airflow
+
+  airflow-webserver:
+    image: radiocovid-airflow:2.9.2
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      WANDB_API_KEY: ${WANDB_API_KEY:-}
+      WANDB_MODE: ${WANDB_MODE:-online}
+      HOST_PROJECT_DIR: ${HOST_PROJECT_DIR:-${PWD}}
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "8080:8080"
+    command: webserver
+    profiles:
+      - airflow
+
+  airflow-scheduler:
+    image: radiocovid-airflow:2.9.2
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      WANDB_API_KEY: ${WANDB_API_KEY:-}
+      WANDB_MODE: ${WANDB_MODE:-online}
+      HOST_PROJECT_DIR: ${HOST_PROJECT_DIR:-${PWD}}
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: scheduler
+    profiles:
+      - airflow
+
+volumes:
+  airflow-postgres-data:
