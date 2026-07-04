@@ -201,3 +201,9 @@ data/inference_images/
 
 simple_train/
 artifacts/
+
+# Cursor local skills (non versionnés)
+.cursor/skills/
+
+# Entraînements locaux (non versionnés)
+tests_perso/

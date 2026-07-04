@@ -22,7 +22,7 @@
 
 from unittest.mock import MagicMock
 
-from wandb_download_ckpt import (
+from radiocovid.inference.wandb_download_ckpt import (
     choose_metric,
     download_artifact,
     fetch_production_model,
@@ -167,7 +167,9 @@ class TestFetchProductionModel:
         artifact = MagicMock()
         api = MagicMock()
         api.artifact.return_value = artifact
-        result = fetch_production_model(api, "radiocovid-classifier", "radiocovid-classifier")
+        result = fetch_production_model(
+            api, "radiocovid-classifier", "radiocovid-classifier"
+        )
         assert result is artifact
         called_path = api.artifact.call_args[0][0]
         assert "wandb-registry-radiocovid-classifier" in called_path
@@ -178,10 +180,15 @@ class TestFetchProductionModel:
         api.artifact.return_value = MagicMock()
         fetch_production_model(api, "radiocovid-classifier", "my-collection")
         called_path = api.artifact.call_args[0][0]
-        assert called_path == "wandb-registry-radiocovid-classifier/my-collection:production"
+        assert (
+            called_path
+            == "wandb-registry-radiocovid-classifier/my-collection:production"
+        )
 
     def test_returns_none_when_registry_raises(self):
         api = MagicMock()
         api.artifact.side_effect = Exception("not found")
-        result = fetch_production_model(api, "radiocovid-classifier", "radiocovid-classifier")
+        result = fetch_production_model(
+            api, "radiocovid-classifier", "radiocovid-classifier"
+        )
         assert result is None

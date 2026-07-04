@@ -63,8 +63,9 @@ addopts = "--import-mode=importlib --cov=radiocovid --cov-report=term-missing"
 exclude = ["tests/"]
 
 [tool.uv.workspace]
-members = ["radiocovid-core", "radiocovid-etl"]
+members = ["radiocovid-core", "radiocovid-etl", "radiocovid-inference"]
 
 [tool.uv.sources]
 radiocovid-core = { workspace = true }
 radiocovid-etl = { workspace = true }
+radiocovid-inference = { workspace = true }

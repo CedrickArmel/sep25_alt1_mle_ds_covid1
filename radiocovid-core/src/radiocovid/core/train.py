@@ -27,8 +27,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import hydra
 from dotenv import load_dotenv
 from lightning import Callback, LightningDataModule, LightningModule, Trainer
-from lightning.pytorch.loggers import Logger
-from lightning.pytorch.loggers import WandbLogger
+from lightning.pytorch.loggers import Logger, WandbLogger
 from omegaconf import DictConfig
 from radiocovid.core.utils import (
     RankedLogger,
@@ -48,7 +47,9 @@ log = RankedLogger(__name__, rank_zero_only=True)
 def _link_to_registry(loggers: List[Logger], cfg: DictConfig) -> None:
     """Link the best model artifact logged during training to the W&B Model Registry
     with the alias 'challenger', ready for a human to promote to 'production'."""
-    registered_model_name = cfg.get("wandb_registered_model_name", "radiocovid-classifier")
+    registered_model_name = cfg.get(
+        "wandb_registered_model_name", "radiocovid-classifier"
+    )
 
     for logger in loggers:
         if not isinstance(logger, WandbLogger):

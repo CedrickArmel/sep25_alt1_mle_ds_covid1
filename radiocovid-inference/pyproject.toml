@@ -1,0 +1,47 @@
+[build-system]
+build-backend = "uv_build"
+requires = ["uv_build>=0.9.28,<0.10.0"]
+
+[dependency-groups]
+lint = [
+    "black>=25.12.0",
+    "flake8>=7.3.0",
+    "isort>=7.0.0",
+    "pre-commit>=4.5.1",
+]
+typing = ["mypy>=1.19.1"]
+test = [
+    "pytest>=8.0.0",
+    "pytest-cov>=6.0.0",
+    "pytest-mock>=3.0.0",
+    "httpx>=0.28.0",
+]
+
+[project]
+name = "radiocovid-inference"
+version = "0.1.4"
+requires-python = ">=3.10,<3.11"
+dependencies = [
+    "torch>=2.6.0",
+    "torchvision>=0.21.0",
+    "fastapi>=0.136.3",
+    "uvicorn[standard]>=0.34.3",
+    "pillow>=12.1.1",
+    "python-dotenv>=1.1.0",
+    "python-multipart>=0.0.29",
+    "wandb>=0.19.11",
+    "omegaconf>=2.3.0",
+]
+
+[tool.black]
+line-length = 88
+
+[tool.isort]
+profile = "black"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.uv.build-backend]
+namespace = true
+module-name = "radiocovid.inference"
