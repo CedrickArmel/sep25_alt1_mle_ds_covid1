@@ -21,19 +21,12 @@
 # SOFTWARE.
 
 import os
-import sys
-from pathlib import Path
 
 import numpy as np
 import pytest
 import torch
 import torch.nn as nn
 from PIL import Image
-
-# Make predict.py and src/wandb_download_ckpt.py importable
-_PKG_ROOT = Path(__file__).parents[1]
-sys.path.insert(0, str(_PKG_ROOT))
-sys.path.insert(0, str(_PKG_ROOT / "src"))
 
 os.environ.setdefault("WANDB_MODE", "offline")
 

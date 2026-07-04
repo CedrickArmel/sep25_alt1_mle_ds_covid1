@@ -28,6 +28,15 @@ services:
     environment:
       WANDB_MODE: ${WANDB_MODE:-offline}
       WANDB_API_KEY: ${WANDB_API_KEY:-}
+      WANDB_ENTITY: ${WANDB_ENTITY:-}
+      WANDB_PROJECT: ${WANDB_PROJECT:-radiologist}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     profiles:
       - train
 
@@ -41,6 +50,9 @@ services:
     environment:
       WANDB_API_KEY: ${WANDB_API_KEY:-}
       WANDB_ENTITY: ${WANDB_ENTITY:-}
-      WANDB_PROJECT: ${WANDB_PROJECT:-radiocovid}
+      WANDB_REGISTRY: ${WANDB_REGISTRY:-Radiocovid-classifier}
+      WANDB_REGISTRY_MODEL: ${WANDB_REGISTRY_MODEL:-radiocovid-classifier}
+      WANDB_REGISTRY_ALIAS: ${WANDB_REGISTRY_ALIAS:-production}
+      WANDB_REGISTRY_SOURCE_PROJECT: ${WANDB_REGISTRY_SOURCE_PROJECT:-radiocovid}
     profiles:
       - inference

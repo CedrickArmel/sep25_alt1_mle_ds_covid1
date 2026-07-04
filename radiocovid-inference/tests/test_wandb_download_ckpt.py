@@ -22,7 +22,11 @@
 
 from unittest.mock import MagicMock
 
-from wandb_download_ckpt import choose_metric, download_artifact, find_model_artifact
+from radiocovid.inference.wandb_download_ckpt import (
+    choose_metric,
+    download_artifact,
+    find_model_artifact,
+)
 
 
 def _make_artifact(name):

@@ -22,9 +22,15 @@
 
 import torch
 import torch.nn as nn
-from predict import CLASSES, build_model, get_transform, load_checkpoint
-from predict import predict as run_predict
 from torchvision import transforms
+
+from radiocovid.inference.predict import (
+    CLASSES,
+    build_model,
+    get_transform,
+    load_checkpoint,
+)
+from radiocovid.inference.predict import predict as run_predict
 
 # --------------------------------------------------------------------------- #
 # build_model                                                                  #
@@ -120,6 +126,46 @@ class TestPredict:
         )
         assert label in CLASSES
         assert 0.0 <= confidence <= 1.0
+
+
+# --------------------------------------------------------------------------- #
+# load_model (registry)                                                        #
+# --------------------------------------------------------------------------- #
+
+
+class TestRegistryArtifact:
+    def test_fetches_artifact_from_registry_path(self, monkeypatch):
+        import wandb
+
+        from radiocovid.inference import predict as predict_module
+
+        class FakeArtifact:
+            name = "radiocovid-classifier"
+            version = "v0"
+            source_name = "model-5mr8ud16:v0"
+            source_project = "radiocovid"
+
+        captured = {}
+
+        class FakeApi:
+            def artifact(self, path):
+                captured["path"] = path
+                return FakeArtifact()
+
+        monkeypatch.setattr(wandb, "Api", FakeApi)
+
+        artifact, meta = predict_module._registry_artifact(
+            "my-entity", "model", "radiocovid-classifier", "production"
+        )
+
+        assert (
+            captured["path"] == "wandb-registry-model/radiocovid-classifier:production"
+        )
+        assert artifact.name == "model-5mr8ud16"
+        assert meta["run_id"] == "5mr8ud16"
+        assert meta["registry_model"] == "radiocovid-classifier"
+        assert meta["registry_alias"] == "production"
+        assert meta["registry_artifact"] == "radiocovid-classifier:v0"
 
 
 # --------------------------------------------------------------------------- #
