@@ -115,7 +115,7 @@ def _source_artifact_paths(entity: str, registry_artifact) -> list[str]:
 def _download_artifact(api, entity: str, registry_artifact):
     """Download registry artifact, falling back to the source training artifact if needed."""
     try:
-        return Path(registry_artifact.download()), "registry"
+        return Path(registry_artifact.download(skip_cache=True)), "registry"
     except Exception as exc:
         if "does not have access" not in str(exc).lower():
             raise
