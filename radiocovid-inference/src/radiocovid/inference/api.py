@@ -82,7 +82,10 @@ async def predict_endpoint(file: UploadFile = File(...)):
     try:
         image = Image.open(io.BytesIO(contents)).convert("RGB")
     except Exception:
-        raise HTTPException(status_code=400, detail="Imagen inválida")
+        raise HTTPException(status_code=400, detail="Image invalide")
+
+    if not _state:
+        raise HTTPException(status_code=503, detail="Model not loaded")
 
     label, confidence = run_predict(
         _state["model"], image, _state["transform"], _state["device"]

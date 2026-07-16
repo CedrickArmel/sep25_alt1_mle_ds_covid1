@@ -146,6 +146,9 @@ class TestRegistryArtifact:
         captured = {}
 
         class FakeApi:
+            def __init__(self, overrides=None):
+                pass
+
             def artifact(self, path):
                 captured["path"] = path
                 return FakeArtifact()
@@ -159,7 +162,7 @@ class TestRegistryArtifact:
         assert (
             captured["path"] == "wandb-registry-model/radiocovid-classifier:production"
         )
-        assert artifact.name == "model-5mr8ud16"
+        assert artifact.name == "radiocovid-classifier"
         assert meta["run_id"] == "5mr8ud16"
         assert meta["registry_model"] == "radiocovid-classifier"
         assert meta["registry_alias"] == "production"

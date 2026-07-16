@@ -185,7 +185,7 @@ def _registry_artifact(entity: str, registry: str, registry_model: str, alias: s
 # -------------------------------
 def load_model():
     entity = os.environ.get("WANDB_ENTITY", "yebouetc")
-    registry = os.environ.get("WANDB_REGISTRY", "Radiocovid-classifier")
+    registry = os.environ.get("WANDB_REGISTRY", "radiocovid-classifier")
     registry_model = os.environ.get("WANDB_REGISTRY_MODEL", "radiocovid-classifier")
     registry_alias = os.environ.get("WANDB_REGISTRY_ALIAS", "production")
 
@@ -237,7 +237,7 @@ def get_transform():
             transforms.Grayscale(num_output_channels=3),
             transforms.Resize(256),
             transforms.ToTensor(),
-            transforms.Normalize(mean=[128, 128, 128], std=[65, 65, 65]),
+            transforms.Normalize(mean=[0.502, 0.502, 0.502], std=[0.255, 0.255, 0.255]),
         ]
     )
 
