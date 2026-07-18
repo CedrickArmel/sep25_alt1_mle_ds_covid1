@@ -40,7 +40,21 @@ Raw X-ray images
                    │
                    ▼
      Trained model checkpoint
-     + metrics & training logs
+     + W&B model artifact
+                   │
+                   ▼
+┌─────────────────────────────────────┐
+│  Model Registry  (W&B)              │
+│  scripts/register_model.py          │
+│  promote best run → @production     │
+└──────────────────┬──────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────┐
+│  Inference  (radiocovid-inference)  │
+│  FastAPI · loads @production        │
+│  POST /predict on chest X-rays      │
+└─────────────────────────────────────┘
 ```
 
 ---
@@ -51,11 +65,16 @@ Raw X-ray images
 |---|---|
 | `radiocovid-core/` | Modeling library — datamodule, VGG-11 backbone, focal loss, training loop |
 | `radiocovid-etl/` | Data preparation — outlier removal (Haralick GLCM), ImageFolder builder |
+| `radiocovid-inference/` | Inference package — model loading from W&B Model Registry, FastAPI server |
+| `scripts/` | Operational scripts — `register_model.py` (promote best run to registry) |
+| `docker/` | Dockerfiles and entrypoint scripts for each pipeline stage |
 | `data/` | Raw and processed X-ray images (tracked by DVC, stored on Google Drive) |
 | `models/` | Saved model checkpoints |
 | `notebooks/` | Exploratory data analysis notebooks |
 | `references/` | Research paper that informs the modeling choices |
 | `reports/` | Generated figures and reports |
+| `docker-compose.yml` | Orchestrates all containerised pipeline stages |
+| `.env.example` | Template for W&B credentials and Model Registry settings (copy to `.env`) |
 
 ```text
 ├── data.dvc
@@ -122,6 +141,34 @@ Raw X-ray images
 | Google Drive access | — | Ask a project maintainer to share the DVC remote with you |
 
 > **Host bootstrap (optional):** The `Makefile` provides `make cpusetup`, `make gpusetup`, and `make tpusetup` targets that install `pyenv`, `uv`, and the relevant environment variables for CPU, GPU (CUDA), or TPU runs respectively. You only need these if you are setting up a fresh machine.
+
+### Dev container (recommended)
+
+Use a dev container when you want the **same Linux environment** on Windows, macOS, or Linux without installing Python and system libraries by hand. Your project files stay on your machine; only the tools (Python, `uv`, OpenCV libs, etc.) run inside Docker.
+
+| Requirement | Notes |
+|---|---|
+| [Docker Desktop](https://www.docker.com/products/docker-desktop/) | Must be running before opening the container |
+| **Dev Containers** extension | **Cursor:** install **Dev Containers** by **Anysphere** (`anysphere.remote-containers`). **VS Code:** install **Dev Containers** by Microsoft. Do **not** rely on **Container Tools** alone — it does not open the project in a dev container. |
+
+**First-time setup:**
+
+1. Clone this repo and open the **repository root** in Cursor or VS Code.
+2. Command Palette → **Dev Containers: Rebuild and Reopen in Container** (first run only; later use *Reopen in Container*).
+3. Wait for the post-create step to finish (`uv sync --all-groups` and `pre-commit install`). The first build can take **10–20 minutes** (PyTorch and dependencies).
+4. Optional: set `WANDB_API_KEY` in your shell environment if you need online Weights & Biases logging. The container defaults to `WANDB_MODE=offline`.
+
+**Quick check** (inside the container terminal):
+
+```shell
+python --version          # Python 3.10.x
+uv run python -c "import torch; print(torch.__version__)"
+uv run pytest radiocovid-core/tests/test_imports.py -q
+```
+
+Configuration lives in `.devcontainer/` (`Dockerfile` + `devcontainer.json`). **Git** (`commit`, `push`) works the same as on your host: the repo is mounted into the container, not copied.
+
+To leave the container: **Dev Containers: Reopen Folder Locally**.
 
 ---
 
@@ -283,6 +330,177 @@ Key config groups:
 | `callbacks` | `early_stopping`, `model_checkpoint` |
 
 Override any value with `foo.bar=value`. For repeatable experiments, create a YAML file under `radiocovid-core/src/radiocovid/core/configs/experiment/` and load it with `experiment=your_experiment_name`.
+
+---
+
+## Running with Docker
+
+The pipeline can be run without installing Python or any dependencies locally — everything runs inside Docker containers orchestrated by Docker Compose.
+
+### Prerequisites
+
+| Tool | Version | Install |
+|---|---|---|
+| [Docker Desktop](https://www.docker.com/products/docker-desktop/) | latest | Must be running |
+
+### Pipeline stages
+
+| Compose profile | What it runs | Default model |
+|---|---|---|
+| `etl` | `radiocovid-clean` → `radiocovid-train-folder` | — |
+| `train` | `radiocovid-train` | ResNet50 binary |
+| `inference` | FastAPI server on port 8000 | W&B Model Registry `@production` |
+
+### Step 1 — Fetch the data
+
+The dataset must be fetched with DVC before running any container (see [Step 2](#step-2--fetch-the-data) in the vanilla run section above).
+
+### Step 2 — Configure W&B
+
+Copy the environment template and fill in your personal values:
+
+```shell
+cp .env.example .env
+```
+
+| Variable | Required for | Notes |
+|---|---|---|
+| `WANDB_API_KEY` | Training (online), inference | Leave empty for offline training only |
+| `WANDB_ENTITY` | Training (online), inference, promotion | Your W&B team or user slug |
+| `WANDB_PROJECT` | Training, promotion | Default `radiologist` (Hydra project name) |
+| `WANDB_REGISTRY*` | Inference | Model Registry name, collection, alias — see `.env.example` |
+
+The `.env` file is git-ignored — each developer keeps their own locally. Docker Compose reads it automatically for variable substitution.
+
+### Step 3 — Run the ETL
+
+```shell
+docker compose --profile etl up
+```
+
+This will:
+1. Build the `radiocovid-etl:0.1.0` image on first run (subsequent runs reuse the cached image)
+2. Clean the raw images from `./data/01_raw/` and write `./data/manifest.parquet`
+3. Build the training folder structure under `./data/train_folder/`
+
+The container exits automatically when both steps complete. Your `./data/` folder is mounted into the container — outputs are written directly to your machine.
+
+### Step 4 — Run the training
+
+```shell
+docker compose --profile train up
+```
+
+This trains a ResNet50 binary classifier by default. Checkpoints are saved to `./models/` and logs to `./logs/`.
+
+To override any Hydra config parameter:
+
+```shell
+# Different experiment
+docker compose --profile train run train experiment=train_resnet50_binary_2
+
+# Custom hyperparameters
+docker compose --profile train run train \
+  module/optimizer=sgd \
+  module/scheduler=cosine \
+  trainer.max_epochs=50
+```
+
+### Step 5 — Run inference
+
+The inference container serves a REST API that loads the model tagged `@production` in the W&B Model Registry. It installs `radiocovid-inference` from the local source tree (no PyPI publish required when you change inference code).
+
+**Prerequisites:** `WANDB_API_KEY` and `WANDB_ENTITY` must be set in `.env`. The registry collection `Radiocovid-classifier/radiocovid-classifier` must already exist in your W&B entity.
+
+```shell
+docker compose --profile inference build
+docker compose --profile inference up
+```
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/health` | GET | Liveness check |
+| `/info` | GET | Loaded model metadata (run id, registry alias, source artifact) |
+| `/predict` | POST | Upload a chest X-ray image (`multipart/form-data`, field `file`) |
+| `/reload` | POST | Re-download the model from the registry (after promotion) |
+
+**Quick test** (with the server running):
+
+```shell
+curl http://localhost:8000/health
+curl http://localhost:8000/info
+curl -X POST http://localhost:8000/predict -F "file=@path/to/xray.png"
+```
+
+After promoting a new model (see [Model Registry](#model-registry--promoting-a-model)), reload without restarting the container:
+
+```shell
+curl -X POST http://localhost:8000/reload
+```
+
+**Registry download fallback:** If the W&B registry artifact cannot be downloaded (permissions), the inference service automatically falls back to the source training artifact in `WANDB_REGISTRY_SOURCE_PROJECT` (default `radiocovid`). Set this in `.env` if your production model lives in a different source project.
+
+**Override the registry path** (optional): set `WANDB_REGISTRY_ARTIFACT` in `.env` to the full path copied from the W&B registry Usage tab.
+
+### Rebuilding an image after a package update
+
+```shell
+docker compose --profile etl build && docker compose --profile etl up
+docker compose --profile train build && docker compose --profile train up
+docker compose --profile inference build && docker compose --profile inference up
+```
+
+---
+
+## Model Registry — promoting a model
+
+After training, each run with `log_model=True` produces a **model artifact** in W&B. The promotion script picks the best run (by `best_val_score`, i.e. validation F1 macro) and links it to the existing Model Registry collection.
+
+**Script location:** `scripts/register_model.py` (run from the repository root).
+
+### Workflow
+
+```
+Training runs (WANDB_PROJECT=radiologist)
+        │
+        ▼
+scripts/register_model.py          ← dry-run: compare candidate vs @production
+        │
+        ▼  --promote
+W&B Model Registry  @production
+        │
+        ▼
+Inference container  (docker compose --profile inference)
+        │
+        ▼  POST /reload
+Serving the new model
+```
+
+### Usage
+
+```shell
+# 1. Configure .env (WANDB_API_KEY, WANDB_ENTITY, WANDB_PROJECT, WANDB_REGISTRY*)
+cp .env.example .env
+
+# 2. Dry-run — shows current production vs best candidate, no W&B changes
+uv run --with wandb python scripts/register_model.py
+
+# 3. Apply promotion — links artifact and moves the @production alias
+uv run --with wandb python scripts/register_model.py --promote
+
+# 4. Reload the inference API (if already running)
+curl -X POST http://localhost:8000/reload
+```
+
+The script is **dry-run by default**. It compares the candidate's `best_val_score` against the current production model and warns if promotion would be a downgrade. It skips promotion when the same source artifact is already in production.
+
+**Registry variables** (in `.env`):
+
+| Variable | Default | Role |
+|---|---|---|
+| `WANDB_REGISTRY` | `Radiocovid-classifier` | Registry name (without `wandb-registry-` prefix) |
+| `WANDB_REGISTRY_MODEL` | `radiocovid-classifier` | Collection name inside the registry |
+| `WANDB_REGISTRY_ALIAS` | `production` | Alias to update on promotion and to serve at inference |
 
 ---
 

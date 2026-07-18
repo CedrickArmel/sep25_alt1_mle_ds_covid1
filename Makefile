@@ -105,7 +105,11 @@ export PYENVINIT
 export PYENV_GIT_TAG
 export UVALIASES
 
-.PHONY: tpusetup gpusetup remove-tf uv pyenv venv reload
+.PHONY: tpusetup gpusetup remove-tf uv pyenv venv reload test
+
+test:
+	@uv sync --group test
+	@pytest -q
 
 tpusetup: tpuenvs remove-tf uv pyenv venv reload
 gpusetup: gpuenvs remove-tf uv pyenv venv reload

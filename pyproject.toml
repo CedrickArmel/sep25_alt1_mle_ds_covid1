@@ -17,13 +17,23 @@ lint = [
     "pre-commit>=4.5.1",
 ]
 typing = ["mypy>=1.19.1"]
-test = []
+test = [
+    "pytest>=8.0.0",
+    "pytest-cov>=6.0.0",
+    "pytest-mock>=3.0.0",
+]
 
 [project]
 name = "radiocovid"
 version = "0.1.0"
 requires-python = ">=3.10,<3.11"
-dependencies = ["radiocovid-core"]
+dependencies = [
+    "fastapi>=0.136.3",
+    "pillow>=12.1.1",
+    "python-multipart>=0.0.29",
+    "radiocovid-core",
+    "uvicorn>=0.48.0",
+]
 
 [project.optional-dependencies]
 all = ["radiocovid-core", "radiocovid-etl"]
@@ -41,9 +51,21 @@ profile = "black"
 [tool.uv.build-backend]
 namespace = true
 
+[tool.pytest.ini_options]
+testpaths = [
+    "radiocovid-core/tests",
+    "radiocovid-etl/tests",
+    "radiocovid-inference/tests",
+]
+addopts = "--import-mode=importlib --cov=radiocovid --cov-report=term-missing"
+
+[tool.mypy]
+exclude = ["tests/"]
+
 [tool.uv.workspace]
-members = ["radiocovid-core", "radiocovid-etl"]
+members = ["radiocovid-core", "radiocovid-etl", "radiocovid-inference"]
 
 [tool.uv.sources]
 radiocovid-core = { workspace = true }
 radiocovid-etl = { workspace = true }
+radiocovid-inference = { workspace = true }
