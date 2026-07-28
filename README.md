@@ -249,7 +249,7 @@ Helper (same DVC steps, then prints the git commands):
 make data-version TAG=data-v1.1
 ```
 
-Current baseline immutable tag: **`data-v1.0`**.  
+Current baseline immutable tag: **`data-v1.0`**.
 Floating pointer used by Docker by default: **`data-latest`** (updated whenever you ingest new images).
 
 ---

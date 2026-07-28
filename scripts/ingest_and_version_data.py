@@ -1,4 +1,26 @@
 #!/usr/bin/env python3
+# MIT License
+#
+# Copyright (c) 2025 @CedrickArmel, @samarita22, @TaxelleT & @Yeyecodes
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
 """Ingest images from incoming/ and publish a new DVC dataset version.
 
 Supports two sources:
@@ -37,6 +59,7 @@ _GDRIVE_FOLDER_MIME = "application/vnd.google-apps.folder"
 # helpers
 # ---------------------------------------------------------------------------
 
+
 def run(cmd: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
     print("+", " ".join(cmd))
     return subprocess.run(
@@ -72,6 +95,7 @@ def _default_credentials_file() -> str:
 # GDrive sync (INFRA-04a)
 # ---------------------------------------------------------------------------
 
+
 def _gdrive_auth():
     """Authenticate with GDrive reusing the DVC OAuth token.
 
@@ -87,13 +111,11 @@ def _gdrive_auth():
             "It is bundled with dvc-gdrive: `pip install dvc-gdrive`"
         )
 
-    client_id = (
-        os.environ.get("GDRIVE_CLIENT_ID")
-        or _read_dvc_config_local("gdrive_client_id")
+    client_id = os.environ.get("GDRIVE_CLIENT_ID") or _read_dvc_config_local(
+        "gdrive_client_id"
     )
-    client_secret = (
-        os.environ.get("GDRIVE_CLIENT_SECRET")
-        or _read_dvc_config_local("gdrive_client_secret")
+    client_secret = os.environ.get("GDRIVE_CLIENT_SECRET") or _read_dvc_config_local(
+        "gdrive_client_secret"
     )
     if not client_id or not client_secret:
         raise SystemExit(
@@ -223,6 +245,7 @@ def sync_from_gdrive(folder_id: str, *, dry_run: bool = False) -> int:
 # local helpers
 # ---------------------------------------------------------------------------
 
+
 def list_incoming_images() -> list[tuple[str, Path]]:
     """List all images under incoming/<class>/images/ and /masks/."""
     found: list[tuple[str, Path]] = []
@@ -324,6 +347,7 @@ def publish_version(tag: str, *, skip_push: bool) -> None:
 # ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
