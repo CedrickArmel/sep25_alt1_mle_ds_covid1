@@ -1,0 +1,94 @@
+name: Data Ingest
+
+# Triggered manually from the GitHub Actions UI.
+# A maintainer deposits images in Drive/incoming_images/ then clicks
+# Actions → Data Ingest → Run workflow.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: >
+          Dataset tag (e.g. data-v1.2).
+          Leave blank to auto-increment from the latest data-vX.Y tag.
+        required: false
+        default: ""
+      dry_run:
+        description: "Dry run — list Drive files without downloading or versioning"
+        required: false
+        type: boolean
+        default: false
+
+# Folder ID of Drive/incoming_images/ (non-sensitive, already in .env.example).
+# Override by adding an INCOMING_GDRIVE_FOLDER_ID repository secret.
+env:
+  INCOMING_GDRIVE_FOLDER_ID: "1dAEaH4KxmOCkS0hRKN5SsNePLeyJ17VQ"
+  DVC_GDRIVE_CREDENTIALS_PATH: .dvc/tmp/gdrive-user-credentials.json
+
+jobs:
+  ingest:
+    name: Sync Drive → DVC → Git
+    runs-on: ubuntu-latest
+
+    steps:
+      # ------------------------------------------------------------------
+      # 1. Checkout with full history so all data-vX.Y tags are available
+      #    and so git push works (PAT bypasses branch protection if needed).
+      # ------------------------------------------------------------------
+      - name: Checkout (full history + tags)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT }}
+
+      # ------------------------------------------------------------------
+      # 2. Python + DVC
+      # ------------------------------------------------------------------
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install DVC + GDrive support
+        run: pip install "dvc[gdrive]" pydrive2
+
+      # ------------------------------------------------------------------
+      # 3. GDrive credentials
+      #    GDRIVE_CREDENTIALS_JSON  = content of .dvc/tmp/gdrive-user-credentials.json
+      #                               (obtained after a one-time `dvc push` on a local machine)
+      #    GDRIVE_CLIENT_ID / SECRET = same OAuth app used for dvc pull/push
+      # ------------------------------------------------------------------
+      - name: Write GDrive OAuth token
+        env:
+          GDRIVE_CREDENTIALS_JSON: ${{ secrets.GDRIVE_CREDENTIALS_JSON }}
+        run: |
+          mkdir -p .dvc/tmp
+          echo "$GDRIVE_CREDENTIALS_JSON" > .dvc/tmp/gdrive-user-credentials.json
+
+      - name: Configure DVC local remote credentials
+        run: |
+          dvc remote modify --local data gdrive_client_id     "${{ secrets.GDRIVE_CLIENT_ID }}"
+          dvc remote modify --local data gdrive_client_secret "${{ secrets.GDRIVE_CLIENT_SECRET }}"
+          dvc remote modify --local data gdrive_user_credentials_file .dvc/tmp/gdrive-user-credentials.json
+
+      # ------------------------------------------------------------------
+      # 4. Git identity (needed for the commit created by publish_version)
+      # ------------------------------------------------------------------
+      - name: Configure git identity
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      # ------------------------------------------------------------------
+      # 5. Run the ingest script
+      #    The script handles: Drive sync → copy → dvc add/push → git commit/tag/push
+      # ------------------------------------------------------------------
+      - name: Run ingest script
+        env:
+          INCOMING_SOURCE: gdrive
+          GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+        run: |
+          ARGS="--source=gdrive"
+          [ -n "${{ inputs.tag }}" ]           && ARGS="$ARGS --tag ${{ inputs.tag }}"
+          [ "${{ inputs.dry_run }}" = "true" ] && ARGS="$ARGS --dry-run"
+          python scripts/ingest_and_version_data.py $ARGS

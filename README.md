@@ -189,8 +189,20 @@ uv sync --group dev
 
 The dataset lives on Google Drive and is version-controlled with DVC.
 
+- **Google Drive (via DVC)** stores the heavy image files.
+- **Git** stores `data.dvc` (a small pointer + hash) and optional tags such as `data-v1.0`.
+
 ```shell
 dvc fetch
+# or, to also check out files into ./data :
+dvc pull
+```
+
+**Fetch a specific data version** (after cloning):
+
+```shell
+git checkout data-v1.0
+dvc pull
 ```
 
 **First-time Google Drive setup:** If this is your first connection to the remote, you need a `client_id` and `client_secret` from the project's Google Cloud project. Follow the [DVC GDrive setup guide](https://doc.dvc.org/user-guide/data-management/remote-storage/google-drive#using-a-custom-google-cloud-project-recommended), then run:
@@ -198,8 +210,62 @@ dvc fetch
 ```shell
 dvc remote modify --local data gdrive_client_id     [YOUR-CLIENT-ID]
 dvc remote modify --local data gdrive_client_secret [YOUR-CLIENT-ID-SECRET]
+dvc remote modify --local data gdrive_user_credentials_file .dvc/tmp/gdrive-user-credentials.json
 dvc fetch
 ```
+
+A browser window will open for Google login. On success, DVC writes a local token file (gitignored) under `.dvc/tmp/`.
+
+---
+
+### Publishing a new data version
+
+Do this only when the contents of `data/` change (new/removed/corrected images).
+
+```
+modify data/  →  dvc add  →  dvc push  →  git commit data.dvc  →  git tag  →  git push
+```
+
+1. Update images under `data/`.
+2. Register the new hash and upload to Drive:
+
+   ```shell
+   dvc add data/
+   dvc push
+   ```
+
+3. Commit the pointer and tag the version (example: `data-v1.1`):
+
+   ```shell
+   git add data.dvc
+   git commit -m "chore: bump dataset to data-v1.1"
+   git tag -a data-v1.1 -m "Dataset version data-v1.1"
+   git push origin HEAD data-v1.1
+   ```
+
+Helper (same DVC steps, then prints the git commands):
+
+```shell
+make data-version TAG=data-v1.1
+```
+
+Current baseline immutable tag: **`data-v1.0`**.  
+Floating pointer used by Docker by default: **`data-latest`** (updated whenever you ingest new images).
+
+---
+
+### Ingest new images automatically (local incoming folder)
+
+Until the shared Drive upload folder is available, drop new images under `incoming/<class>/` then run:
+
+```shell
+make data-ingest
+# dry-run: python scripts/ingest_and_version_data.py --dry-run
+```
+
+This copies files into `data/01_raw/COVID-19_Radiography_Dataset/`, runs DVC add/push, creates `data-vX.Y`, and moves the floating tag `data-latest`. See `incoming/README.md`.
+
+When you have the Drive **incoming** folder id, set `INCOMING_SOURCE=gdrive` and `INCOMING_GDRIVE_FOLDER_ID=...` in `.env` — the download step will be wired to the same script.
 
 ---
 
@@ -351,9 +417,14 @@ The pipeline can be run without installing Python or any dependencies locally �
 | `train` | `radiocovid-train` | ResNet50 binary |
 | `inference` | FastAPI server on port 8000 | W&B Model Registry `@production` |
 
-### Step 1 — Fetch the data
+### Step 1 — Fetch the data (optional on the host)
 
-The dataset must be fetched with DVC before running any container (see [Step 2](#step-2--fetch-the-data) in the vanilla run section above).
+You can either:
+
+- **Pull on the host** (classic): see [Step 2](#step-2--fetch-the-data) above, then run containers with `DVC_PULL=0`, or
+- **Pull inside the ETL container** (default): set `GDRIVE_CLIENT_*` in `.env`, keep `DVC_PULL=1`. Default `DATA_VERSION=data-latest` resolves the newest dataset tag before cleaning.
+
+Prerequisite for in-container pull: a one-time interactive `dvc pull`/`dvc push` on the host so `.dvc/tmp/gdrive-user-credentials.json` exists (browser login). That file is **mounted** into the container — it is never baked into the image.
 
 ### Step 2 — Configure W&B
 
@@ -365,6 +436,9 @@ cp .env.example .env
 
 | Variable | Required for | Notes |
 |---|---|---|
+| `GDRIVE_CLIENT_ID` / `GDRIVE_CLIENT_SECRET` | ETL/train with `DVC_PULL=1` | Same values as `.dvc/config.local` |
+| `DATA_VERSION` | ETL/train with `DVC_PULL=1` | Default `data-latest` (or pin `data-v1.0`, …) |
+| `DVC_PULL` | ETL/train | `1` = pull inside container; `0` = use mounted `./data` |
 | `WANDB_API_KEY` | Training (online), inference | Leave empty for offline training only |
 | `WANDB_ENTITY` | Training (online), inference, promotion | Your W&B team or user slug |
 | `WANDB_PROJECT` | Training, promotion | Default `radiologist` (Hydra project name) |
@@ -380,8 +454,9 @@ docker compose --profile etl up
 
 This will:
 1. Build the `radiocovid-etl:0.1.0` image on first run (subsequent runs reuse the cached image)
-2. Clean the raw images from `./data/01_raw/` and write `./data/manifest.parquet`
-3. Build the training folder structure under `./data/train_folder/`
+2. If `DVC_PULL=1`: resolve `data.dvc` from `DATA_VERSION` and `dvc pull` into `./data`
+3. Clean the raw images from `./data/01_raw/` and write `./data/manifest.parquet`
+4. Build the training folder structure under `./data/train_folder/`
 
 The container exits automatically when both steps complete. Your `./data/` folder is mounted into the container — outputs are written directly to your machine.
 

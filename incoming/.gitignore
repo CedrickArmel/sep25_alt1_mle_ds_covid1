@@ -1,0 +1,13 @@
+# Ignore uploaded images; keep docs and folder placeholders
+*
+!.gitignore
+!README.md
+!COVID/
+!Lung_Opacity/
+!Normal/
+!Viral Pneumonia/
+!COVID/.gitkeep
+!Lung_Opacity/.gitkeep
+!Normal/.gitkeep
+!Viral Pneumonia/.gitkeep
+_processed/
