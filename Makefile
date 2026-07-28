@@ -105,11 +105,36 @@ export PYENVINIT
 export PYENV_GIT_TAG
 export UVALIASES
 
-.PHONY: tpusetup gpusetup remove-tf uv pyenv venv reload test
+.PHONY: tpusetup gpusetup remove-tf uv pyenv venv reload test data-version data-ingest
 
 test:
 	@uv sync --group test
 	@pytest -q
+
+# Publish a new dataset version after changing files under data/.
+# Usage: make data-version TAG=data-v1.1
+data-version:
+ifndef TAG
+	$(error TAG is required, e.g. make data-version TAG=data-v1.1)
+endif
+	dvc add data/
+	dvc push
+	@echo ""
+	@echo "✅ DVC pointer updated and pushed to the remote."
+	@echo "Next (Git):"
+	@echo "  git add data.dvc"
+	@echo "  git commit -m \"chore: bump dataset to $(TAG)\""
+	@echo "  git tag -a $(TAG) -m \"Dataset version $(TAG)\""
+	@echo "  git tag -f data-latest $(TAG)"
+	@echo "  git push origin HEAD $(TAG)"
+	@echo "  git push --force origin data-latest"
+
+# Ingest images from incoming/<class>/ then publish a new DVC + Git version.
+# Optional: TAG=data-v1.2  SKIP_PUSH=1  (see scripts/ingest_and_version_data.py)
+data-ingest:
+	python scripts/ingest_and_version_data.py \
+		$(if $(TAG),--tag $(TAG),) \
+		$(if $(filter 1,$(SKIP_PUSH)),--skip-push,)
 
 tpusetup: tpuenvs remove-tf uv pyenv venv reload
 gpusetup: gpuenvs remove-tf uv pyenv venv reload
