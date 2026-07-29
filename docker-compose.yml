@@ -74,6 +74,7 @@ services:
       WANDB_REGISTRY_MODEL: ${WANDB_REGISTRY_MODEL:-radiocovid-classifier}
       WANDB_REGISTRY_ALIAS: ${WANDB_REGISTRY_ALIAS:-production}
       WANDB_REGISTRY_SOURCE_PROJECT: ${WANDB_REGISTRY_SOURCE_PROJECT:-radiocovid}
+      API_KEY: ${API_KEY:-}
     profiles:
       - inference
 
@@ -243,6 +244,7 @@ services:
       WANDB_REGISTRY_MODEL: ${WANDB_REGISTRY_MODEL:-radiocovid-classifier}
       WANDB_REGISTRY_ALIAS: ${WANDB_REGISTRY_ALIAS:-production}
       WANDB_REGISTRY_SOURCE_PROJECT: ${WANDB_REGISTRY_SOURCE_PROJECT:-radiocovid}
+      API_KEY: ${API_KEY:-}
     profiles:
       - e2e
 
