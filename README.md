@@ -40,7 +40,21 @@ Raw X-ray images
                    │
                    ▼
      Trained model checkpoint
-     + metrics & training logs
+     + W&B model artifact
+                   │
+                   ▼
+┌─────────────────────────────────────┐
+│  Model Registry  (W&B)              │
+│  scripts/register_model.py          │
+│  promote best run → @production     │
+└──────────────────┬──────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────┐
+│  Inference  (radiocovid-inference)  │
+│  FastAPI · loads @production        │
+│  POST /predict on chest X-rays      │
+└─────────────────────────────────────┘
 ```
 
 ---
@@ -51,6 +65,8 @@ Raw X-ray images
 |---|---|
 | `radiocovid-core/` | Modeling library — datamodule, VGG-11 backbone, focal loss, training loop |
 | `radiocovid-etl/` | Data preparation — outlier removal (Haralick GLCM), ImageFolder builder |
+| `radiocovid-inference/` | Inference package — model loading from W&B Model Registry, FastAPI server |
+| `scripts/` | Operational scripts — `register_model.py` (promote best run to registry) |
 | `docker/` | Dockerfiles and entrypoint scripts for each pipeline stage |
 | `data/` | Raw and processed X-ray images (tracked by DVC, stored on Google Drive) |
 | `models/` | Saved model checkpoints |
@@ -58,6 +74,7 @@ Raw X-ray images
 | `references/` | Research paper that informs the modeling choices |
 | `reports/` | Generated figures and reports |
 | `docker-compose.yml` | Orchestrates all containerised pipeline stages |
+| `.env.example` | Template for W&B credentials and Model Registry settings (copy to `.env`) |
 
 ```text
 ├── data.dvc
@@ -172,8 +189,20 @@ uv sync --group dev
 
 The dataset lives on Google Drive and is version-controlled with DVC.
 
+- **Google Drive (via DVC)** stores the heavy image files.
+- **Git** stores `data.dvc` (a small pointer + hash) and optional tags such as `data-v1.0`.
+
 ```shell
 dvc fetch
+# or, to also check out files into ./data :
+dvc pull
+```
+
+**Fetch a specific data version** (after cloning):
+
+```shell
+git checkout data-v1.0
+dvc pull
 ```
 
 **First-time Google Drive setup:** If this is your first connection to the remote, you need a `client_id` and `client_secret` from the project's Google Cloud project. Follow the [DVC GDrive setup guide](https://doc.dvc.org/user-guide/data-management/remote-storage/google-drive#using-a-custom-google-cloud-project-recommended), then run:
@@ -181,8 +210,62 @@ dvc fetch
 ```shell
 dvc remote modify --local data gdrive_client_id     [YOUR-CLIENT-ID]
 dvc remote modify --local data gdrive_client_secret [YOUR-CLIENT-ID-SECRET]
+dvc remote modify --local data gdrive_user_credentials_file .dvc/tmp/gdrive-user-credentials.json
 dvc fetch
 ```
+
+A browser window will open for Google login. On success, DVC writes a local token file (gitignored) under `.dvc/tmp/`.
+
+---
+
+### Publishing a new data version
+
+Do this only when the contents of `data/` change (new/removed/corrected images).
+
+```
+modify data/  →  dvc add  →  dvc push  →  git commit data.dvc  →  git tag  →  git push
+```
+
+1. Update images under `data/`.
+2. Register the new hash and upload to Drive:
+
+   ```shell
+   dvc add data/
+   dvc push
+   ```
+
+3. Commit the pointer and tag the version (example: `data-v1.1`):
+
+   ```shell
+   git add data.dvc
+   git commit -m "chore: bump dataset to data-v1.1"
+   git tag -a data-v1.1 -m "Dataset version data-v1.1"
+   git push origin HEAD data-v1.1
+   ```
+
+Helper (same DVC steps, then prints the git commands):
+
+```shell
+make data-version TAG=data-v1.1
+```
+
+Current baseline immutable tag: **`data-v1.0`**.
+Floating pointer used by Docker by default: **`data-latest`** (updated whenever you ingest new images).
+
+---
+
+### Ingest new images automatically (local incoming folder)
+
+Until the shared Drive upload folder is available, drop new images under `incoming/<class>/` then run:
+
+```shell
+make data-ingest
+# dry-run: python scripts/ingest_and_version_data.py --dry-run
+```
+
+This copies files into `data/01_raw/COVID-19_Radiography_Dataset/`, runs DVC add/push, creates `data-vX.Y`, and moves the floating tag `data-latest`. See `incoming/README.md`.
+
+When you have the Drive **incoming** folder id, set `INCOMING_SOURCE=gdrive` and `INCOMING_GDRIVE_FOLDER_ID=...` in `.env` — the download step will be wired to the same script.
 
 ---
 
@@ -332,21 +415,36 @@ The pipeline can be run without installing Python or any dependencies locally �
 |---|---|---|
 | `etl` | `radiocovid-clean` → `radiocovid-train-folder` | — |
 | `train` | `radiocovid-train` | ResNet50 binary |
+| `inference` | FastAPI server on port 8000 | W&B Model Registry `@production` |
 
-### Step 1 — Fetch the data
+### Step 1 — Fetch the data (optional on the host)
 
-The dataset must be fetched with DVC before running any container (see [Step 2](#step-2--fetch-the-data) in the vanilla run section above).
+You can either:
 
-### Step 2 — Configure W&B (optional)
+- **Pull on the host** (classic): see [Step 2](#step-2--fetch-the-data) above, then run containers with `DVC_PULL=0`, or
+- **Pull inside the ETL container** (default): set `GDRIVE_CLIENT_*` in `.env`, keep `DVC_PULL=1`. Default `DATA_VERSION=data-latest` resolves the newest dataset tag before cleaning.
 
-Training logs metrics to Weights & Biases. By default it runs in **offline mode** (no account needed). To enable online logging:
+Prerequisite for in-container pull: a one-time interactive `dvc pull`/`dvc push` on the host so `.dvc/tmp/gdrive-user-credentials.json` exists (browser login). That file is **mounted** into the container — it is never baked into the image.
+
+### Step 2 — Configure W&B
+
+Copy the environment template and fill in your personal values:
 
 ```shell
 cp .env.example .env
-# Edit .env and paste your W&B API key
 ```
 
-The `.env` file is git-ignored — each developer keeps their own locally.
+| Variable | Required for | Notes |
+|---|---|---|
+| `GDRIVE_CLIENT_ID` / `GDRIVE_CLIENT_SECRET` | ETL/train with `DVC_PULL=1` | Same values as `.dvc/config.local` |
+| `DATA_VERSION` | ETL/train with `DVC_PULL=1` | Default `data-latest` (or pin `data-v1.0`, …) |
+| `DVC_PULL` | ETL/train | `1` = pull inside container; `0` = use mounted `./data` |
+| `WANDB_API_KEY` | Training (online), inference | Leave empty for offline training only |
+| `WANDB_ENTITY` | Training (online), inference, promotion | Your W&B team or user slug |
+| `WANDB_PROJECT` | Training, promotion | Default `radiologist` (Hydra project name) |
+| `WANDB_REGISTRY*` | Inference | Model Registry name, collection, alias — see `.env.example` |
+
+The `.env` file is git-ignored — each developer keeps their own locally. Docker Compose reads it automatically for variable substitution.
 
 ### Step 3 — Run the ETL
 
@@ -356,8 +454,9 @@ docker compose --profile etl up
 
 This will:
 1. Build the `radiocovid-etl:0.1.0` image on first run (subsequent runs reuse the cached image)
-2. Clean the raw images from `./data/01_raw/` and write `./data/manifest.parquet`
-3. Build the training folder structure under `./data/train_folder/`
+2. If `DVC_PULL=1`: resolve `data.dvc` from `DATA_VERSION` and `dvc pull` into `./data`
+3. Clean the raw images from `./data/01_raw/` and write `./data/manifest.parquet`
+4. Build the training folder structure under `./data/train_folder/`
 
 The container exits automatically when both steps complete. Your `./data/` folder is mounted into the container — outputs are written directly to your machine.
 
@@ -382,12 +481,101 @@ docker compose --profile train run train \
   trainer.max_epochs=50
 ```
 
+### Step 5 — Run inference
+
+The inference container serves a REST API that loads the model tagged `@production` in the W&B Model Registry. It installs `radiocovid-inference` from the local source tree (no PyPI publish required when you change inference code).
+
+**Prerequisites:** `WANDB_API_KEY` and `WANDB_ENTITY` must be set in `.env`. The registry collection `Radiocovid-classifier/radiocovid-classifier` must already exist in your W&B entity.
+
+```shell
+docker compose --profile inference build
+docker compose --profile inference up
+```
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/health` | GET | Liveness check |
+| `/info` | GET | Loaded model metadata (run id, registry alias, source artifact) |
+| `/predict` | POST | Upload a chest X-ray image (`multipart/form-data`, field `file`) |
+| `/reload` | POST | Re-download the model from the registry (after promotion) |
+
+**Quick test** (with the server running):
+
+```shell
+curl http://localhost:8000/health
+curl http://localhost:8000/info
+curl -X POST http://localhost:8000/predict -F "file=@path/to/xray.png"
+```
+
+After promoting a new model (see [Model Registry](#model-registry--promoting-a-model)), reload without restarting the container:
+
+```shell
+curl -X POST http://localhost:8000/reload
+```
+
+**Registry download fallback:** If the W&B registry artifact cannot be downloaded (permissions), the inference service automatically falls back to the source training artifact in `WANDB_REGISTRY_SOURCE_PROJECT` (default `radiocovid`). Set this in `.env` if your production model lives in a different source project.
+
+**Override the registry path** (optional): set `WANDB_REGISTRY_ARTIFACT` in `.env` to the full path copied from the W&B registry Usage tab.
+
 ### Rebuilding an image after a package update
 
 ```shell
 docker compose --profile etl build && docker compose --profile etl up
 docker compose --profile train build && docker compose --profile train up
+docker compose --profile inference build && docker compose --profile inference up
 ```
+
+---
+
+## Model Registry — promoting a model
+
+After training, each run with `log_model=True` produces a **model artifact** in W&B. The promotion script picks the best run (by `best_val_score`, i.e. validation F1 macro) and links it to the existing Model Registry collection.
+
+**Script location:** `scripts/register_model.py` (run from the repository root).
+
+### Workflow
+
+```
+Training runs (WANDB_PROJECT=radiologist)
+        │
+        ▼
+scripts/register_model.py          ← dry-run: compare candidate vs @production
+        │
+        ▼  --promote
+W&B Model Registry  @production
+        │
+        ▼
+Inference container  (docker compose --profile inference)
+        │
+        ▼  POST /reload
+Serving the new model
+```
+
+### Usage
+
+```shell
+# 1. Configure .env (WANDB_API_KEY, WANDB_ENTITY, WANDB_PROJECT, WANDB_REGISTRY*)
+cp .env.example .env
+
+# 2. Dry-run — shows current production vs best candidate, no W&B changes
+uv run --with wandb python scripts/register_model.py
+
+# 3. Apply promotion — links artifact and moves the @production alias
+uv run --with wandb python scripts/register_model.py --promote
+
+# 4. Reload the inference API (if already running)
+curl -X POST http://localhost:8000/reload
+```
+
+The script is **dry-run by default**. It compares the candidate's `best_val_score` against the current production model and warns if promotion would be a downgrade. It skips promotion when the same source artifact is already in production.
+
+**Registry variables** (in `.env`):
+
+| Variable | Default | Role |
+|---|---|---|
+| `WANDB_REGISTRY` | `Radiocovid-classifier` | Registry name (without `wandb-registry-` prefix) |
+| `WANDB_REGISTRY_MODEL` | `radiocovid-classifier` | Collection name inside the registry |
+| `WANDB_REGISTRY_ALIAS` | `production` | Alias to update on promotion and to serve at inference |
 
 ---
 

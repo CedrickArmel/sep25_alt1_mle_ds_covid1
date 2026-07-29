@@ -26,8 +26,8 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from PIL import Image
-from predict import get_transform, load_model
-from predict import predict as run_predict
+from radiocovid.inference.predict import get_transform, load_model
+from radiocovid.inference.predict import predict as run_predict
 
 load_dotenv()
 
@@ -44,7 +44,7 @@ def _load_into_state():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("Loading model from W&B...")
+    print("Loading model from W&B Model Registry...")
     _load_into_state()
     print("Model loaded ✅")
     yield
@@ -70,7 +70,7 @@ def info():
 
 @app.post("/reload")
 def reload():
-    print("Reloading model from W&B...")
+    print("Reloading model from W&B Model Registry...")
     _load_into_state()
     print("Model reloaded ✅")
     return {"status": "reloaded", **_state["info"]}
@@ -82,7 +82,10 @@ async def predict_endpoint(file: UploadFile = File(...)):
     try:
         image = Image.open(io.BytesIO(contents)).convert("RGB")
     except Exception:
-        raise HTTPException(status_code=400, detail="Imagen inválida")
+        raise HTTPException(status_code=400, detail="Image invalide")
+
+    if not _state:
+        raise HTTPException(status_code=503, detail="Model not loaded")
 
     label, confidence = run_predict(
         _state["model"], image, _state["transform"], _state["device"]

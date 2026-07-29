@@ -5,12 +5,22 @@ services:
       context: docker/etl
       dockerfile: Dockerfile
     image: radiocovid-etl:0.1.0
+    env_file:
+      - .env
     volumes:
       - ./data:/data
+      - ./.dvc/config:/dvc-config-ro:ro
+      - ${DVC_GDRIVE_CREDENTIALS_PATH:-./.dvc/tmp/gdrive-user-credentials.json}:/gdrive-user-credentials.json:ro
+      - ./.git:/dvc-workspace/.git:ro
     environment:
       DATA_DIR: /data/01_raw/COVID-19_Radiography_Dataset
       MANIFEST_PATH: /data/manifest.parquet
       TRAIN_FOLDER_DIR: /data/train_folder
+      DVC_PULL: ${DVC_PULL:-1}
+      DVC_PULL_FORCE: ${DVC_PULL_FORCE:-1}
+      DATA_VERSION: ${DATA_VERSION:-data-latest}
+      GDRIVE_CLIENT_ID: ${GDRIVE_CLIENT_ID:-}
+      GDRIVE_CLIENT_SECRET: ${GDRIVE_CLIENT_SECRET:-}
     profiles:
       - etl
 
@@ -20,14 +30,33 @@ services:
       dockerfile: Dockerfile
     image: radiocovid-train:0.1.1
     shm_size: '2g'
+    env_file:
+      - .env
     volumes:
       - ./data:/data
       - ./data:/workspace/data
       - ./models:/workspace/models
       - ./logs:/workspace/logs
+      - ./.dvc/config:/dvc-config-ro:ro
+      - ${DVC_GDRIVE_CREDENTIALS_PATH:-./.dvc/tmp/gdrive-user-credentials.json}:/gdrive-user-credentials.json:ro
+      - ./.git:/dvc-workspace/.git:ro
     environment:
+      DVC_PULL: ${DVC_PULL:-0}
+      DVC_PULL_FORCE: ${DVC_PULL_FORCE:-0}
+      DATA_VERSION: ${DATA_VERSION:-data-latest}
+      GDRIVE_CLIENT_ID: ${GDRIVE_CLIENT_ID:-}
+      GDRIVE_CLIENT_SECRET: ${GDRIVE_CLIENT_SECRET:-}
       WANDB_MODE: ${WANDB_MODE:-offline}
       WANDB_API_KEY: ${WANDB_API_KEY:-}
+      WANDB_ENTITY: ${WANDB_ENTITY:-}
+      WANDB_PROJECT: ${WANDB_PROJECT:-radiologist}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     profiles:
       - train
 
@@ -41,6 +70,94 @@ services:
     environment:
       WANDB_API_KEY: ${WANDB_API_KEY:-}
       WANDB_ENTITY: ${WANDB_ENTITY:-}
-      WANDB_PROJECT: ${WANDB_PROJECT:-radiocovid}
+      WANDB_REGISTRY: ${WANDB_REGISTRY:-radiocovid-classifier}
+      WANDB_REGISTRY_MODEL: ${WANDB_REGISTRY_MODEL:-radiocovid-classifier}
+      WANDB_REGISTRY_ALIAS: ${WANDB_REGISTRY_ALIAS:-production}
+      WANDB_REGISTRY_SOURCE_PROJECT: ${WANDB_REGISTRY_SOURCE_PROJECT:-radiocovid}
     profiles:
       - inference
+
+  # ---------------------------------------------------------------------------
+  # Airflow — orchestration (ETL + Train)
+  # ---------------------------------------------------------------------------
+
+  airflow-postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+    profiles:
+      - airflow
+
+  airflow-init:
+    build:
+      context: docker/airflow
+      dockerfile: Dockerfile
+    image: radiocovid-airflow:2.9.2
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    volumes:
+      - ./dags:/opt/airflow/dags
+    command: >
+      bash -c "airflow db migrate &&
+               airflow users create
+                 --username admin --password admin
+                 --firstname Admin --lastname User
+                 --role Admin --email admin@radiocovid.com"
+    profiles:
+      - airflow
+
+  airflow-webserver:
+    image: radiocovid-airflow:2.9.2
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      WANDB_API_KEY: ${WANDB_API_KEY:-}
+      WANDB_MODE: ${WANDB_MODE:-online}
+      HOST_PROJECT_DIR: ${HOST_PROJECT_DIR:-${PWD}}
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "8080:8080"
+    command: webserver
+    profiles:
+      - airflow
+
+  airflow-scheduler:
+    image: radiocovid-airflow:2.9.2
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      WANDB_API_KEY: ${WANDB_API_KEY:-}
+      WANDB_MODE: ${WANDB_MODE:-online}
+      HOST_PROJECT_DIR: ${HOST_PROJECT_DIR:-${PWD}}
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: scheduler
+    profiles:
+      - airflow
+
+volumes:
+  airflow-postgres-data:

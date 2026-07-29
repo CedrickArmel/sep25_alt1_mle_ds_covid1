@@ -23,22 +23,26 @@
 import io
 from unittest.mock import patch
 
-import api as _api_module
 import numpy as np
 import pytest
+import radiocovid.inference.api as _api_module
 import torch
 import torch.nn as nn
-from api import app
 from fastapi.testclient import TestClient
 from PIL import Image
+from radiocovid.inference.api import app
 from torchvision import transforms
 
 _META = {
-    "run_id": "run_test",
-    "metric": "best_val_score",
-    "metric_value": 0.95,
+    "run_id": "5mr8ud16",
     "entity": "test_entity",
-    "project": "test_project",
+    "registry": "Radiocovid-classifier",
+    "registry_model": "radiocovid-classifier",
+    "registry_alias": "production",
+    "registry_artifact": "radiocovid-classifier:v0",
+    "source_name": "model-5mr8ud16:v0",
+    "source_project": "radiocovid",
+    "downloaded_from": "registry",
     "classes": ["NORMAL", "ABNORMAL"],
 }
 
@@ -73,8 +77,13 @@ def client():
     model = _FixedModel()
     model.eval()
     with (
-        patch("api.load_model", return_value=(model, torch.device("cpu"), _META)),
-        patch("api.get_transform", return_value=_basic_transform()),
+        patch(
+            "radiocovid.inference.api.load_model",
+            return_value=(model, torch.device("cpu"), _META),
+        ),
+        patch(
+            "radiocovid.inference.api.get_transform", return_value=_basic_transform()
+        ),
     ):
         with TestClient(app) as c:
             yield c
@@ -117,7 +126,8 @@ class TestInfoEndpoint:
         assert resp.status_code == 200
         data = resp.json()
         assert data["run_id"] == _META["run_id"]
-        assert data["metric"] == _META["metric"]
+        assert data["registry_model"] == _META["registry_model"]
+        assert data["registry_alias"] == _META["registry_alias"]
 
     def test_returns_503_when_model_not_loaded(self, client):
         _api_module._state.clear()
@@ -134,23 +144,33 @@ class TestReloadEndpoint:
     def test_returns_reloaded_status(self, client):
         with (
             patch(
-                "api.load_model",
+                "radiocovid.inference.api.load_model",
                 return_value=(_FixedModel(), torch.device("cpu"), _META),
             ),
-            patch("api.get_transform", return_value=_basic_transform()),
+            patch(
+                "radiocovid.inference.api.get_transform",
+                return_value=_basic_transform(),
+            ),
         ):
             resp = client.post("/reload")
         assert resp.status_code == 200
         assert resp.json()["status"] == "reloaded"
 
     def test_reload_repopulates_meta(self, client):
-        updated_meta = {**_META, "run_id": "run_updated", "metric_value": 0.99}
+        updated_meta = {
+            **_META,
+            "run_id": "run_updated",
+            "downloaded_from": "theradiologist/radiologist/model-run_updated:v0",
+        }
         with (
             patch(
-                "api.load_model",
+                "radiocovid.inference.api.load_model",
                 return_value=(_FixedModel(), torch.device("cpu"), updated_meta),
             ),
-            patch("api.get_transform", return_value=_basic_transform()),
+            patch(
+                "radiocovid.inference.api.get_transform",
+                return_value=_basic_transform(),
+            ),
         ):
             resp = client.post("/reload")
         assert resp.json()["run_id"] == "run_updated"
