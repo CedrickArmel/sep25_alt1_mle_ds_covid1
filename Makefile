@@ -105,11 +105,34 @@ export PYENVINIT
 export PYENV_GIT_TAG
 export UVALIASES
 
-.PHONY: tpusetup gpusetup remove-tf uv pyenv venv reload test data-version data-ingest
+.PHONY: tpusetup gpusetup remove-tf uv pyenv venv reload test data-version data-ingest \
+	airflow-build airflow-init airflow-up airflow-down airflow-logs
 
 test:
 	@uv sync --group test
 	@pytest -q
+
+# ---------------------------------------------------------------------------
+# Airflow — orchestration (profile: airflow)
+# ---------------------------------------------------------------------------
+# First time: make airflow-build && make airflow-init
+# Then:       make airflow-up   → UI http://localhost:8080 (admin / admin)
+# Set HOST_PROJECT_DIR in .env to the absolute host path of this repo.
+
+airflow-build:
+	docker compose --profile airflow build airflow-init
+
+airflow-init:
+	docker compose --profile airflow up airflow-init
+
+airflow-up:
+	docker compose --profile airflow up -d airflow-postgres airflow-webserver airflow-scheduler
+
+airflow-down:
+	docker compose --profile airflow down
+
+airflow-logs:
+	docker compose --profile airflow logs -f airflow-scheduler
 
 # Publish a new dataset version after changing files under data/.
 # Usage: make data-version TAG=data-v1.1
