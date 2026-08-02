@@ -30,7 +30,6 @@ from fastapi.security.api_key import APIKeyHeader
 from PIL import Image
 from prometheus_client import Counter
 from prometheus_fastapi_instrumentator import Instrumentator
-
 from radiocovid.inference.predict import get_transform, load_model
 from radiocovid.inference.predict import predict as run_predict
 
