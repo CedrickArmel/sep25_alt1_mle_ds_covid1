@@ -65,8 +65,8 @@ services:
       context: .
       dockerfile: docker/inference/Dockerfile
     image: radiocovid-inference:0.1.0
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     environment:
       WANDB_API_KEY: ${WANDB_API_KEY:-}
       WANDB_ENTITY: ${WANDB_ENTITY:-}
@@ -75,6 +75,18 @@ services:
       WANDB_REGISTRY_ALIAS: ${WANDB_REGISTRY_ALIAS:-production}
       WANDB_REGISTRY_SOURCE_PROJECT: ${WANDB_REGISTRY_SOURCE_PROJECT:-radiocovid}
       API_KEY: ${API_KEY:-}
+    profiles:
+      - inference
+
+  nginx:
+    build:
+      context: docker/nginx
+      dockerfile: Dockerfile
+    image: radiocovid-nginx:1.0.0
+    ports:
+      - "80:80"
+    depends_on:
+      - inference
     profiles:
       - inference
 
@@ -235,8 +247,8 @@ services:
     depends_on:
       train-e2e:
         condition: service_completed_successfully
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     environment:
       WANDB_API_KEY: ${WANDB_API_KEY:-}
       WANDB_ENTITY: ${WANDB_ENTITY:-}
@@ -245,6 +257,18 @@ services:
       WANDB_REGISTRY_ALIAS: ${WANDB_REGISTRY_ALIAS:-production}
       WANDB_REGISTRY_SOURCE_PROJECT: ${WANDB_REGISTRY_SOURCE_PROJECT:-radiocovid}
       API_KEY: ${API_KEY:-}
+    profiles:
+      - e2e
+
+  nginx-e2e:
+    build:
+      context: docker/nginx
+      dockerfile: Dockerfile
+    image: radiocovid-nginx:1.0.0
+    ports:
+      - "80:80"
+    depends_on:
+      - inference-e2e
     profiles:
       - e2e
 
