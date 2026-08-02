@@ -611,7 +611,12 @@ elif page == "Prédiction":
         )
 
         if uploaded:
-            st.image(uploaded, caption=uploaded.name, use_container_width=True)
+            uploaded.seek(0)
+            img_bytes = uploaded.read()
+            if len(img_bytes) == 0:
+                st.error("Le fichier reçu est vide — essayez de re-uploader l'image.")
+            else:
+                st.image(img_bytes, caption=uploaded.name, use_container_width=True)
 
     with col_result:
         st.subheader("🔬 Résultat de l'analyse")
@@ -624,7 +629,7 @@ elif page == "Prédiction":
                     headers = {"X-API-Key": API_KEY} if API_KEY else {}
                     resp = requests.post(
                         f"{API_URL}/predict",
-                        files={"file": (uploaded.name, uploaded.getvalue(), uploaded.type)},
+                        files={"file": (uploaded.name, img_bytes, uploaded.type)},
                         headers=headers,
                         timeout=30,
                     )
