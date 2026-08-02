@@ -91,6 +91,36 @@ services:
       - inference
 
   # ---------------------------------------------------------------------------
+  # Monitoring — Prometheus + Grafana
+  # ---------------------------------------------------------------------------
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - inference
+    profiles:
+      - inference
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    profiles:
+      - inference
+
+  # ---------------------------------------------------------------------------
   # Airflow — orchestration (ETL + Train)
   # ---------------------------------------------------------------------------
 
@@ -274,3 +304,4 @@ services:
 
 volumes:
   airflow-postgres-data:
+  grafana-data:

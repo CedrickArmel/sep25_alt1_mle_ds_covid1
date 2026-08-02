@@ -28,6 +28,9 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.security.api_key import APIKeyHeader
 from PIL import Image
+from prometheus_client import Counter
+from prometheus_fastapi_instrumentator import Instrumentator
+
 from radiocovid.inference.predict import get_transform, load_model
 from radiocovid.inference.predict import predict as run_predict
 
@@ -62,6 +65,15 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+# Contador de predicciones por clase (NORMAL / ABNORMAL)
+_predictions_counter = Counter(
+    "radiocovid_predictions_total",
+    "Nombre total de prédictions par label",
+    ["label"],
+)
+
+Instrumentator().instrument(app).expose(app)
 
 
 @app.get("/health")
@@ -100,5 +112,7 @@ async def predict_endpoint(file: UploadFile = File(...)):
     label, confidence = run_predict(
         _state["model"], image, _state["transform"], _state["device"]
     )
+
+    _predictions_counter.labels(label=label).inc()
 
     return {"label": label, "probability": round(confidence, 4)}
