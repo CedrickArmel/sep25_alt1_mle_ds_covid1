@@ -558,7 +558,8 @@ elif page == "Prédiction":
     API_URL = os.environ.get("INFERENCE_API_URL", "http://localhost:8000")
     API_KEY = os.environ.get("API_KEY", "")
 
-    st.markdown("""
+    st.markdown(
+        """
     <style>
     .diag-card {
         padding: 2rem;
@@ -595,10 +596,14 @@ elif page == "Prédiction":
         margin-top: 1.5rem;
     }
     </style>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     st.title("🩻 Analyse de radiographie thoracique")
-    st.markdown("Déposez une radiographie pulmonaire pour obtenir une analyse automatique par le modèle en production.")
+    st.markdown(
+        "Déposez une radiographie pulmonaire pour obtenir une analyse automatique par le modèle en production."
+    )
 
     col_upload, col_result = st.columns([1, 1], gap="large")
 
@@ -644,12 +649,15 @@ elif page == "Prédiction":
                         card_cls = "diag-normal" if is_normal else "diag-abnormal"
                         icon = "✅" if is_normal else "⚠️"
 
-                        st.markdown(f"""
+                        st.markdown(
+                            f"""
                         <div class="diag-card {card_cls}">
                             <div class="diag-label">{icon} {label}</div>
                             <div class="diag-prob">Confiance : <strong>{pct}%</strong></div>
                         </div>
-                        """, unsafe_allow_html=True)
+                        """,
+                            unsafe_allow_html=True,
+                        )
 
                         st.markdown("<br>", unsafe_allow_html=True)
                         st.progress(prob, text=f"Score de confiance : {pct}%")
@@ -658,31 +666,40 @@ elif page == "Prédiction":
                             info_resp = requests.get(f"{API_URL}/info", timeout=10)
                             if info_resp.status_code == 200:
                                 info = info_resp.json()
-                                st.json({
-                                    "label": label,
-                                    "probability": prob,
-                                    "model_run_id": info.get("run_id"),
-                                    "registry_alias": info.get("registry_alias"),
-                                    "classes": info.get("classes"),
-                                })
+                                st.json(
+                                    {
+                                        "label": label,
+                                        "probability": prob,
+                                        "model_run_id": info.get("run_id"),
+                                        "registry_alias": info.get("registry_alias"),
+                                        "classes": info.get("classes"),
+                                    }
+                                )
 
                     elif resp.status_code == 403:
-                        st.error("🔒 Accès refusé — vérifiez la clé API (variable API_KEY).")
+                        st.error(
+                            "🔒 Accès refusé — vérifiez la clé API (variable API_KEY)."
+                        )
                     else:
                         st.error(f"❌ Erreur API ({resp.status_code}) : {resp.text}")
 
                 except requests.exceptions.ConnectionError:
-                    st.error(f"🔌 Impossible de joindre l'API à `{API_URL}`. Vérifiez que le service d'inférence est démarré.")
+                    st.error(
+                        f"🔌 Impossible de joindre l'API à `{API_URL}`. Vérifiez que le service d'inférence est démarré."
+                    )
                 except Exception as e:
                     st.error(f"❌ Erreur inattendue : {e}")
 
-            st.markdown("""
+            st.markdown(
+                """
             <div class="disclaimer">
             ⚠️ <strong>Avertissement médical</strong> — Ce résultat est produit par un modèle d'IA à des fins
             de recherche et de démonstration. Il ne constitue en aucun cas un diagnostic médical.
             Consultez un professionnel de santé qualifié.
             </div>
-            """, unsafe_allow_html=True)
+            """,
+                unsafe_allow_html=True,
+            )
 
 # =========================
 # 6) Conclusion
