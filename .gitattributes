@@ -1,0 +1,3 @@
+# Keep shell scripts with LF so Docker ENTRYPOINT works on Linux
+*.sh text eol=lf
+docker/**/entrypoint.sh text eol=lf

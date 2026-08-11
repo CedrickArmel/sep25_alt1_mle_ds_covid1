@@ -121,7 +121,31 @@ services:
       - inference
 
   # ---------------------------------------------------------------------------
-  # Airflow — orchestration (ETL + Train)
+  # Ingest — image build target (triggered by Airflow DockerOperator)
+  # ---------------------------------------------------------------------------
+
+  ingest:
+    build:
+      context: docker/ingest
+      dockerfile: Dockerfile
+    image: radiocovid-ingest:0.1.0
+    profiles:
+      - airflow
+
+  # ---------------------------------------------------------------------------
+  # Promote — image build target (triggered by Airflow DockerOperator)
+  # ---------------------------------------------------------------------------
+
+  promote:
+    build:
+      context: docker/promote
+      dockerfile: Dockerfile
+    image: radiocovid-promote:0.1.0
+    profiles:
+      - airflow
+
+  # ---------------------------------------------------------------------------
+  # Airflow — orchestration (Ingest + ETL + Train)
   # ---------------------------------------------------------------------------
 
   airflow-postgres:
@@ -155,10 +179,7 @@ services:
       - ./dags:/opt/airflow/dags
     command: >
       bash -c "airflow db migrate &&
-               airflow users create
-                 --username admin --password admin
-                 --firstname Admin --lastname User
-                 --role Admin --email admin@radiocovid.com"
+      airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@radiocovid.com || true"
     profiles:
       - airflow
 
@@ -173,7 +194,21 @@ services:
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
       WANDB_API_KEY: ${WANDB_API_KEY:-}
       WANDB_MODE: ${WANDB_MODE:-online}
+      WANDB_ENTITY: ${WANDB_ENTITY:-}
+      WANDB_PROJECT: ${WANDB_PROJECT:-radiologist}
+      WANDB_REGISTRY: ${WANDB_REGISTRY:-Radiocovid-classifier}
+      WANDB_REGISTRY_MODEL: ${WANDB_REGISTRY_MODEL:-radiocovid-classifier}
+      WANDB_REGISTRY_ALIAS: ${WANDB_REGISTRY_ALIAS:-production}
+      PROMOTE_APPLY: ${PROMOTE_APPLY:-0}
       HOST_PROJECT_DIR: ${HOST_PROJECT_DIR:-${PWD}}
+      INCOMING_SOURCE: ${INCOMING_SOURCE:-local}
+      INCOMING_GDRIVE_FOLDER_ID: ${INCOMING_GDRIVE_FOLDER_ID:-}
+      GDRIVE_CLIENT_ID: ${GDRIVE_CLIENT_ID:-}
+      GDRIVE_CLIENT_SECRET: ${GDRIVE_CLIENT_SECRET:-}
+      GH_PAT: ${GH_PAT:-}
+      INGEST_SKIP_PUSH: ${INGEST_SKIP_PUSH:-1}
+      GIT_USER_NAME: ${GIT_USER_NAME:-airflow-bot}
+      GIT_USER_EMAIL: ${GIT_USER_EMAIL:-airflow@localhost}
     volumes:
       - ./dags:/opt/airflow/dags
       - /var/run/docker.sock:/var/run/docker.sock
@@ -194,7 +229,21 @@ services:
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
       WANDB_API_KEY: ${WANDB_API_KEY:-}
       WANDB_MODE: ${WANDB_MODE:-online}
+      WANDB_ENTITY: ${WANDB_ENTITY:-}
+      WANDB_PROJECT: ${WANDB_PROJECT:-radiologist}
+      WANDB_REGISTRY: ${WANDB_REGISTRY:-Radiocovid-classifier}
+      WANDB_REGISTRY_MODEL: ${WANDB_REGISTRY_MODEL:-radiocovid-classifier}
+      WANDB_REGISTRY_ALIAS: ${WANDB_REGISTRY_ALIAS:-production}
+      PROMOTE_APPLY: ${PROMOTE_APPLY:-0}
       HOST_PROJECT_DIR: ${HOST_PROJECT_DIR:-${PWD}}
+      INCOMING_SOURCE: ${INCOMING_SOURCE:-local}
+      INCOMING_GDRIVE_FOLDER_ID: ${INCOMING_GDRIVE_FOLDER_ID:-}
+      GDRIVE_CLIENT_ID: ${GDRIVE_CLIENT_ID:-}
+      GDRIVE_CLIENT_SECRET: ${GDRIVE_CLIENT_SECRET:-}
+      GH_PAT: ${GH_PAT:-}
+      INGEST_SKIP_PUSH: ${INGEST_SKIP_PUSH:-1}
+      GIT_USER_NAME: ${GIT_USER_NAME:-airflow-bot}
+      GIT_USER_EMAIL: ${GIT_USER_EMAIL:-airflow@localhost}
     volumes:
       - ./dags:/opt/airflow/dags
       - /var/run/docker.sock:/var/run/docker.sock
