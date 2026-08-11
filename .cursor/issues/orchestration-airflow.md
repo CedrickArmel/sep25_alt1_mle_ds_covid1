@@ -36,8 +36,8 @@ Avec Airflow : on configure une fois, et la chaîne tourne quand de nouvelles do
 
 ## Ce qui est déjà fait vs ce qui reste
 
-**Ordre d'exécution :** INFRA-AF-01 → AF-02 → AF-03 → AF-04 → AF-05 → AF-06 → AF-07 → AF-09 → AF-10
-*(AF-08 = variante optionnelle si l'ingest reste dans GitHub Actions au lieu d'Airflow)*
+**Ordre d'exécution :** INFRA-AF-01 → AF-02 → AF-03 → AF-04 → AF-05 → AF-06 → AF-09 → AF-10 → AF-07
+*(AF-08 = obsolète car AF-09 déplace l'ingest dans Airflow)*
 
 ---
 
@@ -166,7 +166,7 @@ Avec Airflow : on configure une fois, et la chaîne tourne quand de nouvelles do
 
 ---
 
-## INFRA-AF-06 : Valider le DAG en run manuel (test end-to-end)
+## INFRA-AF-06 ✅ : Valider le DAG en run manuel (test end-to-end)
 
 **Composant :** INFRA
 **Fichiers concernés :**
@@ -245,42 +245,55 @@ Airflow
 
 ---
 
-## INFRA-AF-09 : Orchestrer l'ingest + versionnage des données dans Airflow
+## INFRA-AF-09 ✅ : Orchestrer l'ingest + versionnage des données dans Airflow
 
 **Composant :** INFRA
 **Fichiers concernés :**
-- `dags/radiocovid_pipeline.py` — ajouter une tâche `ingest` en amont de `etl` (DockerOperator ou BashOperator sur `scripts/ingest_and_version_data.py`)
-- `docker/airflow/Dockerfile` et/ou image dédiée — dépendances DVC / pydrive2 / git si besoin
-- `docker-compose.yml` — volumes credentials GDrive, `.git`, `.dvc`, `incoming/` pour la tâche ingest
-- `.env.example` / `README.md` — schedule (poll Drive) + variables `INCOMING_*`
+- `docker/ingest/Dockerfile` — image Python 3.10-slim + git + dvc[gdrive] + pydrive2
+- `docker/ingest/entrypoint.sh` — configure git identity / credentials, appelle `ingest_and_version_data.py`
+- `dags/radiocovid_pipeline.py` — tâche `ingest` en amont de `etl` (`ingest >> etl >> train`)
+- `docker-compose.yml` — service `ingest` (build) + env vars ingest sur webserver/scheduler
+- `.env.example` — ajout `GH_PAT`, `INGEST_SKIP_PUSH`, `GIT_USER_NAME`, `GIT_USER_EMAIL`
+- `Makefile` — `ingest-build` + `airflow-build` inclut maintenant l'image ingest
 
-**Dépendances :** INFRA-AF-06 + script `scripts/ingest_and_version_data.py` (INFRA-04a/b)
+**Dépendances :** INFRA-AF-06 + script `scripts/ingest_and_version_data.py` (déjà existant)
 
-**Pourquoi :** Le mentor demande d'automatiser au maximum. Aujourd'hui l'ingest est déclenché via GitHub Actions (`workflow_dispatch`). Avec Airflow, le DAG surveille / poll Drive, versionne (DVC + tag Git), puis enchaîne ETL → Train → Promote sans étape manuelle.
+**Pourquoi :** Le mentor demande d'automatiser au maximum. L'ingest était déclenché via GitHub Actions (`workflow_dispatch`). Avec Airflow, le DAG orchestre toute la chaîne sans intervention manuelle.
 
-**Flux cible :**
+**Flux implémenté :**
 ```
-Airflow (schedule / sensor)
-  1. Détecte de nouvelles images dans Drive incoming_images/
-  2. Lance ingest_and_version_data.py (sync → dvc add/push → git tag)
-  3. Si nouvelles données → ETL → TRAIN → PROMOTE
-  4. Si rien de nouveau → skip (short-circuit)
+Airflow (@weekly ou trigger manuel)
+  [1] ingest  → lance radiocovid-ingest:0.1.0 (monte le repo complet à /workspace)
+               → scripts/ingest_and_version_data.py --source=local|gdrive
+               → dvc add + git commit + git tag (INGEST_SKIP_PUSH=1 par défaut)
+  [2] etl     → radiocovid-etl:0.1.0 (préprocessing)
+  [3] train   → radiocovid-train:0.1.1 (entraînement + W&B)
 ```
+
+**Variables clés :**
+| Variable | Défaut | Rôle |
+|---|---|---|
+| `INCOMING_SOURCE` | `local` | Source des images (`local` ou `gdrive`) |
+| `INGEST_SKIP_PUSH` | `1` | `1` = pas de push distant (dev local) ; `0` = push vers GitHub + DVC remote |
+| `GH_PAT` | vide | PAT GitHub pour `git push` des tags (requis si `INGEST_SKIP_PUSH=0`) |
+| `GIT_USER_NAME` | `airflow-bot` | Identité git pour le commit automatique |
 
 **Critères d'acceptation :**
-- [ ] Une tâche `ingest` existe dans le DAG, en amont de `etl`
-- [ ] En présence de nouvelles images Drive, un nouveau tag `data-vX.Y` (+ `data-latest`) est créé
-- [ ] Si aucune nouvelle donnée, le DAG ne lance pas inutilement ETL/Train (ou skip explicite)
-- [ ] Credentials GDrive / DVC montés sans secret hardcodé
-- [ ] README documente le flux Airflow-first (et le statut optionnel de AF-08 / GHA)
+- [x] Une tâche `ingest` existe dans le DAG, en amont de `etl`
+- [x] Image dédiée `radiocovid-ingest:0.1.0` (git + DVC + pydrive2)
+- [x] Credentials GDrive / DVC via variables d'env, sans secret hardcodé
+- [x] `INGEST_SKIP_PUSH=0` + `GH_PAT` → push tags + DVC remote
+- [x] `.env.example` documente toutes les variables
 
 **Taille :** M
 
-**Durée estimée :** ~1 jour
+**Notes d'implémentation (2026-08-11) :**
+- INFRA-AF-09 **terminé**
+- AF-08 (bridge GHA → Airflow) devient **obsolète** : l'ingest est désormais dans Airflow
 
 ---
 
-## INFRA-AF-10 : Ajouter la promotion du meilleur modèle au DAG
+## INFRA-AF-10 ✅ : Ajouter la promotion du meilleur modèle au DAG
 
 **Composant :** INFRA
 **Fichiers concernés :**
@@ -295,15 +308,19 @@ Airflow (schedule / sensor)
 **Pourquoi :** Après un train, les métriques sont dans W&B (`best_val_score`). La promotion vers `@production` se fait aujourd'hui à la main via `register_model.py`. Airflow doit l'automatiser : comparer le candidat au modèle prod et ne promouvoir que s'il est meilleur.
 
 **Critères d'acceptation :**
-- [ ] Tâche `promote` après `train` dans le DAG
-- [ ] Appelle `scripts/register_model.py --promote` (ou équivalent containerisé)
-- [ ] Si le nouveau modèle n'est pas meilleur, pas de changement de `@production` (comportement dry-run / skip déjà dans le script)
-- [ ] `WANDB_API_KEY`, `WANDB_ENTITY`, `WANDB_PROJECT`, `WANDB_REGISTRY*` disponibles pour la tâche
-- [ ] Test unitaire DAG : présence de la tâche `promote` et dépendance `train >> promote`
+- [x] Tâche `promote` après `train` dans le DAG (`ingest >> etl >> train >> promote`)
+- [x] Image dédiée `radiocovid-promote:0.1.0` (Python + wandb)
+- [x] Appelle `scripts/register_model.py` avec `--promote` si `PROMOTE_APPLY=1`, sinon dry-run
+- [x] Si le nouveau modèle n'est pas meilleur, pas de changement de `@production` (géré par le script)
+- [x] `WANDB_API_KEY`, `WANDB_ENTITY`, `WANDB_PROJECT`, `WANDB_REGISTRY*` disponibles pour la tâche
+- [x] `PROMOTE_APPLY` documenté dans `.env.example` (défaut `0` = dry-run safe)
 
 **Taille :** S
 
-**Durée estimée :** ~2–3 h
+**Notes d'implémentation (2026-08-11) :**
+- `docker/promote/Dockerfile` + `entrypoint.sh`
+- Variable `PROMOTE_APPLY` : `0` → affiche comparaison sans changer l'alias ; `1` → promeut si candidat meilleur
+- INFRA-AF-10 **terminé**
 
 ---
 
@@ -332,7 +349,7 @@ Makefile targets       HOST_PROJECT_DIR
          INFRA-AF-09
          Ingest + versionnage dans Airflow
                │
-         INFRA-AF-10
+         INFRA-AF-10 ✅
          Promote meilleur modèle (@production)
 
     (optionnel / alternatif à AF-09)
@@ -351,8 +368,8 @@ Makefile targets       HOST_PROJECT_DIR
 | INFRA-AF-03 | Infra Airflow | Stack Postgres / init / webserver / scheduler | ✅ Fait | S | ~2 h | `docker-compose.yml` |
 | INFRA-AF-04 | Outillage | Targets Makefile `airflow-*` | ✅ Fait | XS | ~30 min | `Makefile`, `README.md` |
 | INFRA-AF-05 | Config | Documenter `HOST_PROJECT_DIR` | ✅ Fait | XS | ~20 min | `.env.example`, `README.md` |
-| INFRA-AF-06 | Validation | Run manuel end-to-end ETL→Train | À faire | S | ~2–3 h | Aucun (ops) |
+| INFRA-AF-06 | Validation | Run manuel end-to-end ETL→Train | ✅ Fait | S | ~2–3 h | Aucun (ops) |
 | INFRA-AF-07 | Qualité | Tests unitaires du DAG | À faire | S | ~2 h | `tests/test_dag_radiocovid_pipeline.py` |
-| INFRA-AF-08 | Pont GHA→Airflow (opt.) | Trigger API après ingest GHA | À faire (opt.) | M | ~½–1 j | `data_ingest.yml`, `README.md` |
-| INFRA-AF-09 | Ingest + versionnage | Poll Drive + `ingest_and_version_data.py` dans le DAG | À faire | M | ~1 j | `dags/...`, `Dockerfile` airflow, `docker-compose.yml`, `.env.example`, `README.md` |
-| INFRA-AF-10 | Promotion modèle | Tâche `promote` via `register_model.py --promote` | À faire | S | ~2–3 h | `dags/...`, `register_model.py` (réutilisé), `docker-compose.yml`, `README.md` |
+| INFRA-AF-08 | Pont GHA→Airflow | Trigger API après ingest GHA | ~~Obsolète~~ (AF-09 fait) | M | — | — |
+| INFRA-AF-09 | Ingest + versionnage | Image `radiocovid-ingest` + tâche `ingest` dans le DAG | ✅ Fait | M | ~1 j | `docker/ingest/`, `dags/radiocovid_pipeline.py`, `docker-compose.yml`, `.env.example`, `Makefile` |
+| INFRA-AF-10 | Promotion modèle | Tâche `promote` via `register_model.py --promote` | ✅ Fait | S | ~2–3 h | `docker/promote/`, `dags/radiocovid_pipeline.py`, `docker-compose.yml`, `.env.example` |

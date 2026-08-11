@@ -106,11 +106,19 @@ export PYENV_GIT_TAG
 export UVALIASES
 
 .PHONY: tpusetup gpusetup remove-tf uv pyenv venv reload test data-version data-ingest \
+	ingest-build \
 	airflow-build airflow-init airflow-up airflow-down airflow-logs
 
 test:
 	@uv sync --group test
 	@pytest -q
+
+# ---------------------------------------------------------------------------
+# Ingest — build the radiocovid-ingest:0.1.0 image (used by Airflow DAG)
+# ---------------------------------------------------------------------------
+# Run once before make airflow-up, or after updating docker/ingest/Dockerfile.
+ingest-build:
+	docker compose --profile airflow build ingest
 
 # ---------------------------------------------------------------------------
 # Airflow — orchestration (profile: airflow)
@@ -120,7 +128,7 @@ test:
 # Set HOST_PROJECT_DIR in .env to the absolute host path of this repo.
 
 airflow-build:
-	docker compose --profile airflow build airflow-init
+	docker compose --profile airflow build airflow-init ingest promote
 
 airflow-init:
 	docker compose --profile airflow up airflow-init
