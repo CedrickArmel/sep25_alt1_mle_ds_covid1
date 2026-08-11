@@ -72,8 +72,12 @@ def isolate_state():
     _api_module._state.clear()
 
 
+_TEST_API_KEY = "test-secret-key"
+
+
 @pytest.fixture
-def client():
+def client(monkeypatch):
+    monkeypatch.setenv("API_KEY", _TEST_API_KEY)
     model = _FixedModel()
     model.eval()
     with (
@@ -152,7 +156,7 @@ class TestReloadEndpoint:
                 return_value=_basic_transform(),
             ),
         ):
-            resp = client.post("/reload")
+            resp = client.post("/reload", headers={"X-API-Key": _TEST_API_KEY})
         assert resp.status_code == 200
         assert resp.json()["status"] == "reloaded"
 
@@ -172,8 +176,16 @@ class TestReloadEndpoint:
                 return_value=_basic_transform(),
             ),
         ):
-            resp = client.post("/reload")
+            resp = client.post("/reload", headers={"X-API-Key": _TEST_API_KEY})
         assert resp.json()["run_id"] == "run_updated"
+
+    def test_returns_403_without_api_key(self, client):
+        resp = client.post("/reload")
+        assert resp.status_code == 403
+
+    def test_returns_403_with_wrong_api_key(self, client):
+        resp = client.post("/reload", headers={"X-API-Key": "wrong-key"})
+        assert resp.status_code == 403
 
 
 # --------------------------------------------------------------------------- #
@@ -184,7 +196,9 @@ class TestReloadEndpoint:
 class TestPredictEndpoint:
     def test_returns_label_and_probability(self, client, png_bytes):
         resp = client.post(
-            "/predict", files={"file": ("img.png", png_bytes, "image/png")}
+            "/predict",
+            files={"file": ("img.png", png_bytes, "image/png")},
+            headers={"X-API-Key": _TEST_API_KEY},
         )
         assert resp.status_code == 200
         body = resp.json()
@@ -193,13 +207,17 @@ class TestPredictEndpoint:
 
     def test_label_is_valid_class(self, client, png_bytes):
         resp = client.post(
-            "/predict", files={"file": ("img.png", png_bytes, "image/png")}
+            "/predict",
+            files={"file": ("img.png", png_bytes, "image/png")},
+            headers={"X-API-Key": _TEST_API_KEY},
         )
         assert resp.json()["label"] in ["NORMAL", "ABNORMAL"]
 
     def test_probability_in_unit_interval(self, client, png_bytes):
         resp = client.post(
-            "/predict", files={"file": ("img.png", png_bytes, "image/png")}
+            "/predict",
+            files={"file": ("img.png", png_bytes, "image/png")},
+            headers={"X-API-Key": _TEST_API_KEY},
         )
         prob = resp.json()["probability"]
         assert 0.0 <= prob <= 1.0
@@ -208,5 +226,20 @@ class TestPredictEndpoint:
         resp = client.post(
             "/predict",
             files={"file": ("bad.bin", b"not-an-image", "application/octet-stream")},
+            headers={"X-API-Key": _TEST_API_KEY},
         )
         assert resp.status_code == 400
+
+    def test_returns_403_without_api_key(self, client, png_bytes):
+        resp = client.post(
+            "/predict", files={"file": ("img.png", png_bytes, "image/png")}
+        )
+        assert resp.status_code == 403
+
+    def test_returns_403_with_wrong_api_key(self, client, png_bytes):
+        resp = client.post(
+            "/predict",
+            files={"file": ("img.png", png_bytes, "image/png")},
+            headers={"X-API-Key": "wrong-key"},
+        )
+        assert resp.status_code == 403

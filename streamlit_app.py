@@ -30,6 +30,7 @@ from typing import Any
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import requests
 import seaborn as sns
 import streamlit as st
 import yaml  # type: ignore[import-untyped]
@@ -554,24 +555,151 @@ elif page == "Résultats":
 # 5) Prédiction
 # =========================
 elif page == "Prédiction":
-    st.title("🔮 Prédiction (checkpoint requis)")
+    API_URL = os.environ.get("INFERENCE_API_URL", "http://localhost:8000")
+    API_KEY = os.environ.get("API_KEY", "")
 
-    ckpts = find_checkpoints(MODELS_DIR)
-    if not ckpts:
-        st.error("""
-❌ Aucun checkpoint `.ckpt` trouvé dans `models/`.
-
-Pour activer la prédiction :
-1) Entraîner le modèle (idéalement dans Colab)
-2) Déposer `best.ckpt` dans `models/`
-3) Recharger l'application
-""")
-        st.stop()
-
-    st.success(f"✅ Checkpoint détecté : {ckpts[-1].name}")
-    st.info(
-        "Chargement & inference : à intégrer selon le format Lightning (RadioCovidModule)."
+    st.markdown(
+        """
+    <style>
+    .diag-card {
+        padding: 2rem;
+        border-radius: 16px;
+        text-align: center;
+        margin-top: 1rem;
+    }
+    .diag-normal {
+        background: linear-gradient(135deg, #064e3b, #065f46);
+        border: 2px solid #10b981;
+    }
+    .diag-abnormal {
+        background: linear-gradient(135deg, #7f1d1d, #991b1b);
+        border: 2px solid #ef4444;
+    }
+    .diag-label {
+        font-size: 2.5rem;
+        font-weight: 800;
+        color: white;
+        letter-spacing: 0.05em;
+    }
+    .diag-prob {
+        font-size: 1.1rem;
+        color: rgba(255,255,255,0.85);
+        margin-top: 0.5rem;
+    }
+    .disclaimer {
+        background: #1e293b;
+        border-left: 4px solid #f59e0b;
+        padding: 0.75rem 1rem;
+        border-radius: 0 8px 8px 0;
+        color: #94a3b8;
+        font-size: 0.85rem;
+        margin-top: 1.5rem;
+    }
+    </style>
+    """,
+        unsafe_allow_html=True,
     )
+
+    st.title("🩻 Analyse de radiographie thoracique")
+    st.markdown(
+        "Déposez une radiographie pulmonaire pour obtenir une analyse automatique par le modèle en production."
+    )
+
+    col_upload, col_result = st.columns([1, 1], gap="large")
+
+    with col_upload:
+        st.subheader("📤 Image à analyser")
+        uploaded = st.file_uploader(
+            "Formats acceptés : PNG, JPG, JPEG",
+            type=["png", "jpg", "jpeg"],
+            label_visibility="collapsed",
+        )
+
+        if uploaded:
+            uploaded.seek(0)
+            img_bytes = uploaded.read()
+            if len(img_bytes) == 0:
+                st.error("Le fichier reçu est vide — essayez de re-uploader l'image.")
+            else:
+                st.image(img_bytes, caption=uploaded.name, use_container_width=True)
+
+    with col_result:
+        st.subheader("🔬 Résultat de l'analyse")
+
+        if not uploaded:
+            st.info("⬅️ Déposez une image pour lancer l'analyse.")
+        else:
+            with st.spinner("Analyse en cours..."):
+                try:
+                    headers = {"X-API-Key": API_KEY} if API_KEY else {}
+                    resp = requests.post(
+                        f"{API_URL}/predict",
+                        files={"file": (uploaded.name, img_bytes, uploaded.type)},
+                        headers=headers,
+                        timeout=30,
+                    )
+
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        label = data["label"]
+                        prob = data["probability"]
+                        pct = round(prob * 100, 1)
+
+                        is_normal = label == "NORMAL"
+                        card_cls = "diag-normal" if is_normal else "diag-abnormal"
+                        icon = "✅" if is_normal else "⚠️"
+
+                        st.markdown(
+                            f"""
+                        <div class="diag-card {card_cls}">
+                            <div class="diag-label">{icon} {label}</div>
+                            <div class="diag-prob">Confiance : <strong>{pct}%</strong></div>
+                        </div>
+                        """,
+                            unsafe_allow_html=True,
+                        )
+
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        st.progress(prob, text=f"Score de confiance : {pct}%")
+
+                        with st.expander("📊 Détails techniques"):
+                            info_resp = requests.get(f"{API_URL}/info", timeout=10)
+                            if info_resp.status_code == 200:
+                                info = info_resp.json()
+                                st.json(
+                                    {
+                                        "label": label,
+                                        "probability": prob,
+                                        "model_run_id": info.get("run_id"),
+                                        "registry_alias": info.get("registry_alias"),
+                                        "classes": info.get("classes"),
+                                    }
+                                )
+
+                    elif resp.status_code == 403:
+                        st.error(
+                            "🔒 Accès refusé — vérifiez la clé API (variable API_KEY)."
+                        )
+                    else:
+                        st.error(f"❌ Erreur API ({resp.status_code}) : {resp.text}")
+
+                except requests.exceptions.ConnectionError:
+                    st.error(
+                        f"🔌 Impossible de joindre l'API à `{API_URL}`. Vérifiez que le service d'inférence est démarré."
+                    )
+                except Exception as e:
+                    st.error(f"❌ Erreur inattendue : {e}")
+
+            st.markdown(
+                """
+            <div class="disclaimer">
+            ⚠️ <strong>Avertissement médical</strong> — Ce résultat est produit par un modèle d'IA à des fins
+            de recherche et de démonstration. Il ne constitue en aucun cas un diagnostic médical.
+            Consultez un professionnel de santé qualifié.
+            </div>
+            """,
+                unsafe_allow_html=True,
+            )
 
 # =========================
 # 6) Conclusion

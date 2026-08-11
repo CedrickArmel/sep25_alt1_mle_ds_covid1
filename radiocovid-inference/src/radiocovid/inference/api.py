@@ -21,17 +21,29 @@
 # SOFTWARE.
 
 import io
+import os
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi.security.api_key import APIKeyHeader
 from PIL import Image
+from prometheus_client import Counter
+from prometheus_fastapi_instrumentator import Instrumentator
 from radiocovid.inference.predict import get_transform, load_model
 from radiocovid.inference.predict import predict as run_predict
 
 load_dotenv()
 
 _state: dict = {}
+
+_API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+def _check_api_key(key: str | None = Depends(_API_KEY_HEADER)) -> None:
+    expected = os.environ.get("API_KEY", "")
+    if expected and key != expected:
+        raise HTTPException(status_code=403, detail="Accès refusé")
 
 
 def _load_into_state():
@@ -53,6 +65,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+# Contador de predicciones por clase (NORMAL / ABNORMAL)
+_predictions_counter = Counter(
+    "radiocovid_predictions_total",
+    "Nombre total de prédictions par label",
+    ["label"],
+)
+
+Instrumentator().instrument(app).expose(app)
+
 
 @app.get("/health")
 def health():
@@ -68,7 +89,7 @@ def info():
     return _state["info"]
 
 
-@app.post("/reload")
+@app.post("/reload", dependencies=[Depends(_check_api_key)])
 def reload():
     print("Reloading model from W&B Model Registry...")
     _load_into_state()
@@ -76,7 +97,7 @@ def reload():
     return {"status": "reloaded", **_state["info"]}
 
 
-@app.post("/predict")
+@app.post("/predict", dependencies=[Depends(_check_api_key)])
 async def predict_endpoint(file: UploadFile = File(...)):
     contents = await file.read()
     try:
@@ -90,5 +111,7 @@ async def predict_endpoint(file: UploadFile = File(...)):
     label, confidence = run_predict(
         _state["model"], image, _state["transform"], _state["device"]
     )
+
+    _predictions_counter.labels(label=label).inc()
 
     return {"label": label, "probability": round(confidence, 4)}

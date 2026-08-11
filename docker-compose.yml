@@ -65,8 +65,8 @@ services:
       context: .
       dockerfile: docker/inference/Dockerfile
     image: radiocovid-inference:0.1.0
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     environment:
       WANDB_API_KEY: ${WANDB_API_KEY:-}
       WANDB_ENTITY: ${WANDB_ENTITY:-}
@@ -74,6 +74,49 @@ services:
       WANDB_REGISTRY_MODEL: ${WANDB_REGISTRY_MODEL:-radiocovid-classifier}
       WANDB_REGISTRY_ALIAS: ${WANDB_REGISTRY_ALIAS:-production}
       WANDB_REGISTRY_SOURCE_PROJECT: ${WANDB_REGISTRY_SOURCE_PROJECT:-radiocovid}
+      API_KEY: ${API_KEY:-}
+    profiles:
+      - inference
+
+  nginx:
+    build:
+      context: docker/nginx
+      dockerfile: Dockerfile
+    image: radiocovid-nginx:1.0.0
+    ports:
+      - "80:80"
+    depends_on:
+      - inference
+    profiles:
+      - inference
+
+  # ---------------------------------------------------------------------------
+  # Monitoring — Prometheus + Grafana
+  # ---------------------------------------------------------------------------
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - inference
+    profiles:
+      - inference
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
     profiles:
       - inference
 
@@ -208,5 +251,106 @@ services:
     profiles:
       - airflow
 
+  # ---------------------------------------------------------------------------
+  # E2E — ETL → Train → Inference en un solo bloque
+  # ---------------------------------------------------------------------------
+
+  etl-e2e:
+    build:
+      context: docker/etl
+      dockerfile: Dockerfile
+    image: radiocovid-etl:0.1.0
+    env_file:
+      - .env
+    volumes:
+      - ./data:/data
+      - ./.dvc/config:/dvc-config-ro:ro
+      - ${DVC_GDRIVE_CREDENTIALS_PATH:-./.dvc/tmp/gdrive-user-credentials.json}:/gdrive-user-credentials.json:ro
+      - ./.git:/dvc-workspace/.git:ro
+    environment:
+      DATA_DIR: /data/01_raw/COVID-19_Radiography_Dataset
+      MANIFEST_PATH: /data/manifest.parquet
+      TRAIN_FOLDER_DIR: /data/train_folder
+      DVC_PULL: ${DVC_PULL:-1}
+      DVC_PULL_FORCE: ${DVC_PULL_FORCE:-1}
+      DATA_VERSION: ${DATA_VERSION:-data-latest}
+      GDRIVE_CLIENT_ID: ${GDRIVE_CLIENT_ID:-}
+      GDRIVE_CLIENT_SECRET: ${GDRIVE_CLIENT_SECRET:-}
+    profiles:
+      - e2e
+
+  train-e2e:
+    build:
+      context: docker/train
+      dockerfile: Dockerfile
+    image: radiocovid-train:0.1.1
+    shm_size: '2g'
+    env_file:
+      - .env
+    depends_on:
+      etl-e2e:
+        condition: service_completed_successfully
+    volumes:
+      - ./data:/data
+      - ./data:/workspace/data
+      - ./models:/workspace/models
+      - ./logs:/workspace/logs
+      - ./.dvc/config:/dvc-config-ro:ro
+      - ${DVC_GDRIVE_CREDENTIALS_PATH:-./.dvc/tmp/gdrive-user-credentials.json}:/gdrive-user-credentials.json:ro
+      - ./.git:/dvc-workspace/.git:ro
+    environment:
+      DVC_PULL: ${DVC_PULL:-0}
+      DVC_PULL_FORCE: ${DVC_PULL_FORCE:-0}
+      DATA_VERSION: ${DATA_VERSION:-data-latest}
+      GDRIVE_CLIENT_ID: ${GDRIVE_CLIENT_ID:-}
+      GDRIVE_CLIENT_SECRET: ${GDRIVE_CLIENT_SECRET:-}
+      WANDB_MODE: ${WANDB_MODE:-offline}
+      WANDB_API_KEY: ${WANDB_API_KEY:-}
+      WANDB_ENTITY: ${WANDB_ENTITY:-}
+      WANDB_PROJECT: ${WANDB_PROJECT:-radiologist}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    profiles:
+      - e2e
+
+  inference-e2e:
+    build:
+      context: .
+      dockerfile: docker/inference/Dockerfile
+    image: radiocovid-inference:0.1.0
+    depends_on:
+      train-e2e:
+        condition: service_completed_successfully
+    expose:
+      - "8000"
+    environment:
+      WANDB_API_KEY: ${WANDB_API_KEY:-}
+      WANDB_ENTITY: ${WANDB_ENTITY:-}
+      WANDB_REGISTRY: ${WANDB_REGISTRY:-radiocovid-classifier}
+      WANDB_REGISTRY_MODEL: ${WANDB_REGISTRY_MODEL:-radiocovid-classifier}
+      WANDB_REGISTRY_ALIAS: ${WANDB_REGISTRY_ALIAS:-production}
+      WANDB_REGISTRY_SOURCE_PROJECT: ${WANDB_REGISTRY_SOURCE_PROJECT:-radiocovid}
+      API_KEY: ${API_KEY:-}
+    profiles:
+      - e2e
+
+  nginx-e2e:
+    build:
+      context: docker/nginx
+      dockerfile: Dockerfile
+    image: radiocovid-nginx:1.0.0
+    ports:
+      - "80:80"
+    depends_on:
+      - inference-e2e
+    profiles:
+      - e2e
+
 volumes:
   airflow-postgres-data:
+  grafana-data:
