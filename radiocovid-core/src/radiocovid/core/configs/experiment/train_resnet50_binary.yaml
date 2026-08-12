@@ -149,7 +149,7 @@ determinism:
 hydra:
   sweeper:
     direction: maximize
-    n_trials: 20
+    n_trials: 5
     sampler:
       n_startup_trials: 1
     params:

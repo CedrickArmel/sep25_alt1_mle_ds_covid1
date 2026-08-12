@@ -11,6 +11,8 @@ set -euo pipefail
 # ETL regenerates manifest/train_folder after pull — default force avoids
 # blocking on local untracked files under data/ (e.g. manifest.parquet).
 : "${DVC_PULL_FORCE:=1}"
+# 1 = skip radiocovid-clean (reuse existing manifest) — useful after a partial Airflow failure
+: "${SKIP_CLEAN:=0}"
 
 configure_dvc_gdrive() {
   if [[ -z "${GDRIVE_CLIENT_ID:-}" || -z "${GDRIVE_CLIENT_SECRET:-}" ]]; then
@@ -62,17 +64,38 @@ pull_data() {
 
 pull_data
 
-echo "========================================="
-echo " ETL — Étape 1 : nettoyage des images"
-echo "========================================="
-radiocovid-clean \
-    data_dir="${DATA_DIR}" \
-    output="${MANIFEST_PATH}"
+if [[ "${SKIP_CLEAN}" == "1" ]]; then
+  echo "SKIP_CLEAN=1 — skipping radiocovid-clean (reusing ${MANIFEST_PATH})"
+  if [[ ! -f "${MANIFEST_PATH}" ]]; then
+    echo "ERROR: SKIP_CLEAN=1 but manifest not found at ${MANIFEST_PATH}"
+    exit 1
+  fi
+else
+  echo "========================================="
+  echo " ETL — Étape 1 : nettoyage des images"
+  echo "========================================="
+  radiocovid-clean \
+      data_dir="${DATA_DIR}" \
+      output="${MANIFEST_PATH}"
+fi
 
 echo "========================================="
 echo " ETL — Étape 2 : construction du train folder"
 echo "========================================="
-rm -rf "${TRAIN_FOLDER_DIR}"
+# Docker Desktop on Windows: plain `rm -rf` on bind mounts often fails with
+# "Directory not empty". Delete contents first, then the directory.
+if [[ -e "${TRAIN_FOLDER_DIR}" ]]; then
+  find "${TRAIN_FOLDER_DIR}" -mindepth 1 -delete 2>/dev/null || true
+  rm -rf "${TRAIN_FOLDER_DIR}" 2>/dev/null || true
+fi
+if [[ -e "${TRAIN_FOLDER_DIR}" ]]; then
+  python -c "import shutil, sys; shutil.rmtree(sys.argv[1], ignore_errors=True)" \
+    "${TRAIN_FOLDER_DIR}"
+fi
+if [[ -e "${TRAIN_FOLDER_DIR}" ]]; then
+  echo "ERROR: could not remove ${TRAIN_FOLDER_DIR} — delete it on the host and retry"
+  exit 1
+fi
 radiocovid-train-folder \
     manifest_path="${MANIFEST_PATH}" \
     dst_dir="${TRAIN_FOLDER_DIR}"

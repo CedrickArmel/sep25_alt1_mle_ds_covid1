@@ -416,6 +416,7 @@ The pipeline can be run without installing Python or any dependencies locally �
 | `etl` | `radiocovid-clean` → `radiocovid-train-folder` | — |
 | `train` | `radiocovid-train` | ResNet50 binary |
 | `inference` | FastAPI server on port 8000 | W&B Model Registry `@production` |
+| `airflow` | Airflow UI + scheduler (orchestrates ETL → Train) | — |
 
 ### Step 1 — Fetch the data (optional on the host)
 
@@ -443,6 +444,7 @@ cp .env.example .env
 | `WANDB_ENTITY` | Training (online), inference, promotion | Your W&B team or user slug |
 | `WANDB_PROJECT` | Training, promotion | Default `radiologist` (Hydra project name) |
 | `WANDB_REGISTRY*` | Inference | Model Registry name, collection, alias — see `.env.example` |
+| `HOST_PROJECT_DIR` | Airflow | Absolute host path to this repo (see [Airflow](#airflow--orchestration)) |
 
 The `.env` file is git-ignored — each developer keeps their own locally. Docker Compose reads it automatically for variable substitution.
 
@@ -523,6 +525,44 @@ curl -X POST http://localhost:8000/reload
 docker compose --profile etl build && docker compose --profile etl up
 docker compose --profile train build && docker compose --profile train up
 docker compose --profile inference build && docker compose --profile inference up
+```
+
+### Airflow — orchestration
+
+Airflow runs the weekly DAG `radiocovid_pipeline` (`dags/radiocovid_pipeline.py`): **ETL → Train**, each step via `DockerOperator` (images `radiocovid-etl` / `radiocovid-train`).
+
+**Prerequisite — `HOST_PROJECT_DIR`:** Airflow itself runs in Docker, then starts ETL/train containers on the host Docker daemon. Bind mounts must use the **host** absolute path of this repository (not a path inside the Airflow container). Set it in `.env` before starting Airflow:
+
+```shell
+# Linux / macOS
+HOST_PROJECT_DIR=/absolute/path/to/sep25_alt1_mle_ds_covid1
+
+# Windows (forward slashes are fine)
+HOST_PROJECT_DIR=C:/Projects/Projet MLops/sep25_alt1_mle_ds_covid1
+```
+
+If unset, `docker-compose.yml` falls back to `${HOST_PROJECT_DIR:-${PWD}}`, which is often incorrect when Compose runs from Docker Desktop / a non-project PWD.
+
+Also build the ETL and train images once (`docker compose --profile etl build` and `--profile train build`) so the DAG can pull them by tag.
+
+| Make target | What it does |
+|---|---|
+| `make airflow-build` | Build image `radiocovid-airflow:2.9.2` |
+| `make airflow-init` | One-shot: migrate Airflow DB + create user `admin` / `admin` |
+| `make airflow-up` | Start Postgres + webserver + scheduler in the background |
+| `make airflow-down` | Stop all Airflow profile services |
+| `make airflow-logs` | Follow scheduler logs |
+
+```shell
+# First time
+make airflow-build
+make airflow-init
+
+# Day to day
+make airflow-up
+# UI → http://localhost:8080  (admin / admin)
+make airflow-logs
+make airflow-down
 ```
 
 ---
