@@ -32,6 +32,8 @@ dependencies = [
     "wandb>=0.19.11",
     "omegaconf>=2.3.0",
     "prometheus-fastapi-instrumentator>=7.0.0",
+    "evidently>=0.4",
+    "pandas>=1.5",
 ]
 
 [tool.black]
