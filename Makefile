@@ -106,7 +106,7 @@ export PYENV_GIT_TAG
 export UVALIASES
 
 .PHONY: tpusetup gpusetup remove-tf uv pyenv venv reload test data-version data-ingest \
-	ingest-build \
+	ingest-build build-reference \
 	airflow-build airflow-init airflow-up airflow-down airflow-logs
 
 test:
@@ -166,6 +166,23 @@ data-ingest:
 	python scripts/ingest_and_version_data.py \
 		$(if $(TAG),--tag $(TAG),) \
 		$(if $(filter 1,$(SKIP_PUSH)),--skip-push,)
+
+# ---------------------------------------------------------------------------
+# Drift monitoring — build reference distribution (DRIFT-02)
+# ---------------------------------------------------------------------------
+# Run once after ETL to build the reference from val/test images.
+# Re-run after each model promotion to keep the reference up-to-date.
+# Usage:
+#   make build-reference                        # uses data/train_folder/val
+#   make build-reference DATA_DIR=data/train_folder/test
+#   make build-reference PUSH_WANDB=1           # also upload to W&B
+DATA_DIR ?= data/train_folder/val
+
+build-reference:
+	uv run python scripts/build_reference.py \
+		--data-dir $(DATA_DIR) \
+		--overwrite \
+		$(if $(filter 1,$(PUSH_WANDB)),--push-wandb,)
 
 tpusetup: tpuenvs remove-tf uv pyenv venv reload
 gpusetup: gpuenvs remove-tf uv pyenv venv reload

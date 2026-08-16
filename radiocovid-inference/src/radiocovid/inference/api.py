@@ -30,6 +30,8 @@ from fastapi.security.api_key import APIKeyHeader
 from PIL import Image
 from prometheus_client import Counter
 from prometheus_fastapi_instrumentator import Instrumentator
+
+from radiocovid.inference.inference_logger import log_prediction
 from radiocovid.inference.predict import get_transform, load_model
 from radiocovid.inference.predict import predict as run_predict
 
@@ -113,5 +115,12 @@ async def predict_endpoint(file: UploadFile = File(...)):
     )
 
     _predictions_counter.labels(label=label).inc()
+
+    log_prediction(
+        image=image,
+        label=label,
+        confidence=confidence,
+        model_run_id=_state["info"].get("run_id", "unknown"),
+    )
 
     return {"label": label, "probability": round(confidence, 4)}
