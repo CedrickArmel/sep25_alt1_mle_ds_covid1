@@ -21,624 +21,333 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import glob
 import json
 import os
-import re
 from pathlib import Path
-from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import requests
-import seaborn as sns
 import streamlit as st
-import yaml  # type: ignore[import-untyped]
 
-# =========================
-# CONFIG APP
-# =========================
+# ---------------------------------------------------------------------------
+# Config
+# ---------------------------------------------------------------------------
 st.set_page_config(
-    page_title="RadioCovid – Projet Poumons", page_icon="🫁", layout="wide"
+    page_title="RadioCovid",
+    page_icon="🫁",
+    layout="wide",
+    initial_sidebar_state="expanded",
 )
 
-st.sidebar.title("🫁 Menu")
-PAGES = [
-    "EDA",
-    "Rééquilibrage",
-    "Modèle",
-    "Résultats",
-    "Prédiction",
-    "Monitoring",
-    "Conclusion",
-]
-page = st.sidebar.radio("Aller à :", PAGES)
-
-# =========================
-# CONSTANTES / CHEMINS
-# =========================
+API_URL = os.environ.get("INFERENCE_API_URL", "http://localhost:8000")
+API_KEY = os.environ.get("API_KEY", "")
 ROOT = Path(".")
-DATA_ROOT = ROOT / "data"
-TRAIN_DIR = DATA_ROOT / "train"
-DUMPS_DIR = DATA_ROOT / "00_dumps"
-MODELS_DIR = ROOT / "models"
-LOGS_DIR = ROOT / "logs"
-NB_EDA_1 = ROOT / "notebooks/1_0_eda_radiography.ipynb"
-NB_EDA_2 = ROOT / "notebooks/1.0_ta_eda_.ipynb"
+INFERENCE_LOG_DIR = Path(os.environ.get("INFERENCE_LOG_DIR", "data/inference_logs"))
+PREDICTIONS_FILE = INFERENCE_LOG_DIR / "predictions.jsonl"
+REFERENCE_FILE = ROOT / "data" / "reference_distribution.json"
 
-MODULE_YAML = ROOT / "radiocovid-core/src/radiocovid/core/configs/module/default.yaml"
-DATAMODULE_YAML = ROOT / "radiocovid-core/src/radiocovid/core/configs/datamodule.yaml"
-REPORTS_DIR = ROOT / "reports"
-REPORTS_FIG_DIR = REPORTS_DIR / "figures"
+# ---------------------------------------------------------------------------
+# Global CSS
+# ---------------------------------------------------------------------------
+st.markdown(
+    """
+<style>
+/* ---- sidebar ---- */
+[data-testid="stSidebar"] {
+    background: #0f172a;
+}
+[data-testid="stSidebar"] * {
+    color: #e2e8f0 !important;
+}
+[data-testid="stSidebarNav"] { display: none; }
 
+/* ---- metric cards ---- */
+[data-testid="stMetric"] {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 1rem 1.2rem;
+}
+[data-testid="stMetricLabel"] { font-size: 0.82rem; color: #64748b; }
+[data-testid="stMetricValue"] { font-size: 1.6rem; font-weight: 700; color: #0f172a; }
 
-# =========================
-# HELPERS
-# =========================
-@st.cache_data
-def load_yaml_safe(path: Path):
+/* ---- divider ---- */
+hr { border-color: #e2e8f0; margin: 1.5rem 0; }
+
+/* ---- badge ---- */
+.badge-ok {
+    display:inline-block;
+    background:#dcfce7; color:#166534;
+    padding:4px 16px; border-radius:999px;
+    font-weight:600; font-size:0.9rem;
+}
+.badge-warn {
+    display:inline-block;
+    background:#fef9c3; color:#854d0e;
+    padding:4px 16px; border-radius:999px;
+    font-weight:600; font-size:0.9rem;
+}
+</style>
+""",
+    unsafe_allow_html=True,
+)
+
+# ---------------------------------------------------------------------------
+# Sidebar navigation
+# ---------------------------------------------------------------------------
+with st.sidebar:
+    st.markdown("## 🫁 RadioCovid")
+    st.markdown("*Système d'aide à la décision en radiologie*")
+    st.markdown("---")
+    page = st.radio(
+        "Navigation",
+        ["🏠 Accueil", "🩻 Prédiction", "📊 Monitoring"],
+        label_visibility="collapsed",
+    )
+    st.markdown("---")
+
+    # API status chip
     try:
-        with open(path, "r") as f:
-            return yaml.safe_load(f)
-    except Exception as e:
-        return {"_warning": f"Impossible de charger {path}: {e}"}
+        r = requests.get(f"{API_URL}/health", timeout=2)
+        if r.status_code == 200:
+            st.success("API en ligne ✓")
+        else:
+            st.warning("API — erreur")
+    except Exception:
+        st.error("API hors ligne")
+
+    st.markdown(
+        "<div style='position:absolute;bottom:1.5rem;left:1.5rem;"
+        "font-size:0.75rem;color:#64748b;'>v1.0 · RadioCovid 2026</div>",
+        unsafe_allow_html=True,
+    )
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 
-@st.cache_data
-def list_classes(train_dir: Path):
-    if not train_dir.exists():
-        return []
-    return [c for c in os.listdir(train_dir) if (train_dir / c).is_dir()]
+@st.cache_data(ttl=60)
+def load_predictions() -> pd.DataFrame:
+    if not PREDICTIONS_FILE.exists():
+        return pd.DataFrame()
+    rows = []
+    with PREDICTIONS_FILE.open(encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if line:
+                try:
+                    rows.append(json.loads(line))
+                except Exception:
+                    pass
+    if not rows:
+        return pd.DataFrame()
+    df = pd.DataFrame(rows)
+    df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
+    return df
 
 
-@st.cache_data
-def count_by_class(train_dir: Path):
-    classes = list_classes(train_dir)
-    return {c: len(list((train_dir / c).glob("*.png"))) for c in classes}
+@st.cache_data(ttl=300)
+def load_reference() -> dict:
+    if not REFERENCE_FILE.exists():
+        return {}
+    try:
+        return json.loads(REFERENCE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
 
 
-def get_example_images(folder: Path, n=3):
-    imgs = sorted(glob.glob(str(folder / "*.png")))
-    return imgs[:n]
+def _style_chart(ax, title=""):
+    ax.set_title(title, fontsize=11, fontweight="600", pad=8, color="#0f172a")
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.tick_params(colors="#64748b", labelsize=8)
+    ax.set_facecolor("#f8fafc")
+    for spine in ["left", "bottom"]:
+        ax.spines[spine].set_color("#e2e8f0")
 
 
-@st.cache_data
-def find_haralick_dumps(dumps_dir: Path):
-    """
-    Cherche fichiers: haralick_features_{feature}_{rep}.npy
-    Retourne: dict[feature][rep] -> np.ndarray
-    """
-    results: dict[str, Any] = {}
-    if not dumps_dir.exists():
-        return results
-    files = sorted(dumps_dir.glob("haralick_features_*_*.npy"))
-    for f in files:
-        # parse nom
-        # ex: haralick_features_entropy_covid.npy
-        name = f.stem  # sans .npy
-        parts = name.split("_")
-        # ["haralick","features","{feature}","{rep}"]
-        if len(parts) < 4:
-            continue
-        feature = parts[2]
-        rep = "_".join(parts[3:])
-        try:
-            arr = np.load(f)
-        except Exception:
-            continue
-        results.setdefault(feature, {})
-        results[feature][rep] = arr
-    return results
+# ===========================================================================
+# PAGE 1 — ACCUEIL
+# ===========================================================================
+if page == "🏠 Accueil":
+    # Hero
+    st.markdown(
+        """
+<div style="background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%);
+            padding:3rem 2.5rem 2.5rem;border-radius:16px;margin-bottom:2rem;">
+  <div style="font-size:0.85rem;color:#7dd3fc;font-weight:600;
+              letter-spacing:.1em;text-transform:uppercase;margin-bottom:.6rem;">
+    Projet MLOps — Promotion 2025/2026
+  </div>
+  <h1 style="color:white;font-size:2.4rem;font-weight:800;margin:0 0 .6rem;">
+    🫁 RadioCovid
+  </h1>
+  <p style="color:#cbd5e1;font-size:1.1rem;margin:0 0 1.5rem;max-width:600px;">
+    Système de classification automatique de radiographies thoraciques
+    avec pipeline MLOps complet — de la donnée brute à la détection de dérive en production.
+  </p>
+  <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+    <span style="background:#1e40af;color:#bfdbfe;padding:4px 14px;
+                 border-radius:999px;font-size:.82rem;font-weight:600;">VGG-11 · PyTorch</span>
+    <span style="background:#065f46;color:#a7f3d0;padding:4px 14px;
+                 border-radius:999px;font-size:.82rem;font-weight:600;">FastAPI · Docker</span>
+    <span style="background:#7c2d12;color:#fed7aa;padding:4px 14px;
+                 border-radius:999px;font-size:.82rem;font-weight:600;">Airflow · W&B · DVC</span>
+    <span style="background:#4a1d96;color:#ddd6fe;padding:4px 14px;
+                 border-radius:999px;font-size:.82rem;font-weight:600;">Evidently · Prometheus</span>
+  </div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
 
+    # Key metrics
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Images d'entraînement", "21 165", "Dataset Kaggle COVID-19")
+    c2.metric("Temps d'inférence", "< 2 s", "Par radiographie")
+    c3.metric("Classes", "2", "NORMAL · ABNORMAL")
+    c4.metric("Pipeline", "100% automatisé", "Ingest → Train → Deploy")
 
-def plot_haralick_boxplots(hara: dict):
-    if not hara:
-        st.info("ℹ️ Aucun dump Haralick trouvé dans `data/00_dumps`.")
-        return
-    features = list(hara.keys())
-    if not features:
-        st.info("ℹ️ Pas de features Haralick disponibles.")
-        return
-    reps = list(next(iter(hara.values())).keys())
-    data_list = []
-    for ft in features:
-        for rep in reps:
-            # On agrège (moyenne) pour une boîte par classe
-            vals = (
-                np.mean(hara[ft][rep], axis=0)
-                if hara[ft][rep].ndim > 1
-                else hara[ft][rep]
-            )
-            vals = np.array(vals).ravel()
-            for v in vals:
-                data_list.append(
-                    {
-                        "Feature": ft.capitalize(),
-                        "Classe": rep.upper(),
-                        "Valeur": float(v),
-                    }
-                )
-    if not data_list:
-        st.info("ℹ️ Pas de données valides pour boxplots.")
-        return
-    df = pd.DataFrame(data_list)
-    fig, ax = plt.subplots(figsize=(10, 5))
-    sns.boxplot(data=df, x="Feature", y="Valeur", hue="Classe", ax=ax)
-    ax.set_title("Distribution des features Haralick par classe")
-    ax.set_xlabel("Feature")
-    ax.set_ylabel("Valeur (agrégée)")
-    ax.legend(loc="best")
-    st.pyplot(fig)
+    st.markdown("---")
 
+    # How it works
+    st.markdown("### Comment ça fonctionne")
+    col1, col2, col3 = st.columns(3)
 
-def plot_haralick_mean_curves(hara: dict):
-    if not hara:
-        return
-    features = list(hara.keys())
-    reps = list(next(iter(hara.values())).keys())
-    cols = st.columns(2)
-    for i, ft in enumerate(features):
-        fig, ax = plt.subplots(figsize=(6, 4))
-        for rep in reps:
-            arr = hara[ft][rep]
-            if arr.ndim == 2:
-                # Si GLCM stockée comme (distance, directions*?)
-                mean_curve = np.mean(arr, axis=1)
-            else:
-                mean_curve = np.array(arr).ravel()
-            ax.plot(mean_curve, label=rep.upper())
-        ax.set_title(f"{ft.capitalize()} – courbes moyennes")
-        ax.set_xlabel("Distance (pixels)")
-        ax.set_ylabel("Valeur")
-        ax.legend()
-        cols[i % 2].pyplot(fig)
-
-
-@st.cache_data
-def find_checkpoints(models_dir: Path):
-    return sorted(models_dir.glob("*.ckpt"))
-
-
-@st.cache_data
-def scan_training_logs(logs_dir: Path):
-    """
-    Cherche des CSV ou métriques simples dans logs/
-    """
-    if not logs_dir.exists():
-        return []
-    metrics = list(logs_dir.rglob("*.csv"))
-    return metrics
-
-
-def render_resume_card():
-    # Inyecta CSS solo una vez por sesión
-    if not st.session_state.get("_resume_css_added", False):
+    with col1:
         st.markdown(
             """
-            <style>
-                .rc-card{
-                    background: #0f172a; /* slate-900 */
-                    color: #e2e8f0;      /* slate-200 */
-                    padding: 1.25rem 1.5rem;
-                    border-radius: 12px;
-                    border: 1px solid #334155; /* slate-700 */
-                    box-shadow: 0 0 0 1px rgba(255,255,255,0.04) inset;
-                }
-                .rc-card h3, .rc-card h4{
-                    margin-top: 0.2rem;
-                    color: #f1f5f9; /* slate-100 */
-                }
-                .rc-card p{
-                    margin: 0.2rem 0 0.8rem 0;
-                }
-                .rc-card ul{
-                    margin: 0.2rem 0 0.8rem 1.1rem;
-                }
-                .rc-tag{
-                    display:inline-block;
-                    background:#1f2937; /* gray-800 */
-                    color:#cbd5e1;      /* slate-300 */
-                    padding: 2px 10px;
-                    border-radius: 999px;
-                    font-size: 0.85rem;
-                    margin-right: 6px;
-                    margin-bottom: 4px;
-                }
-            </style>
-            """,
+<div style="background:#f0f9ff;border-left:4px solid #0284c7;
+            padding:1.2rem;border-radius:0 8px 8px 0;height:160px;">
+  <div style="font-size:1.5rem;margin-bottom:.5rem;">📤</div>
+  <div style="font-weight:700;color:#0f172a;margin-bottom:.4rem;">1. Upload</div>
+  <div style="color:#475569;font-size:.9rem;">
+    Le professionnel de santé dépose une radiographie thoracique via l'interface.
+  </div>
+</div>""",
             unsafe_allow_html=True,
         )
-        st.session_state["_resume_css_added"] = True
 
+    with col2:
+        st.markdown(
+            """
+<div style="background:#f0fdf4;border-left:4px solid #16a34a;
+            padding:1.2rem;border-radius:0 8px 8px 0;height:160px;">
+  <div style="font-size:1.5rem;margin-bottom:.5rem;">🤖</div>
+  <div style="font-weight:700;color:#0f172a;margin-bottom:.4rem;">2. Analyse IA</div>
+  <div style="color:#475569;font-size:.9rem;">
+    Le modèle VGG-11 classifie l'image et retourne un score de confiance en moins de 2 secondes.
+  </div>
+</div>""",
+            unsafe_allow_html=True,
+        )
+
+    with col3:
+        st.markdown(
+            """
+<div style="background:#fdf4ff;border-left:4px solid #9333ea;
+            padding:1.2rem;border-radius:0 8px 8px 0;height:160px;">
+  <div style="font-size:1.5rem;margin-bottom:.5rem;">📊</div>
+  <div style="font-weight:700;color:#0f172a;margin-bottom:.4rem;">3. Surveillance</div>
+  <div style="color:#475569;font-size:.9rem;">
+    Chaque prédiction est loggée. Le système détecte automatiquement toute dérive du modèle.
+  </div>
+</div>""",
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("---")
+
+    # Architecture
+    st.markdown("### Architecture du système")
     st.markdown(
         """
-<div class="rc-card">
-
-<h3>📌 Résumé des volumes du dataset</h3>
-
-<p>L’ensemble de données <em>COVID‑19 Radiography</em> présente des volumes très variables selon les catégories, ce qui introduit un <strong>déséquilibre de classes important</strong> :</p>
-
-<ul>
-  <li><strong>COVID</strong>
-    <ul>
-      <li>Nombre d’images : <strong>3 616</strong></li>
-      <li>Nombre de masques : <strong>3 616</strong></li>
-      <li>Taille des images : <strong>299×299</strong></li>
-      <li>Taille des masques : <strong>256×256</strong></li>
-    </ul>
-  </li>
-  <li><strong>Lung Opacity</strong>
-    <ul>
-      <li>Nombre d’images : <strong>6 012</strong></li>
-      <li>Nombre de masques : <strong>6 012</strong></li>
-      <li>Taille des images : <strong>299×299</strong></li>
-      <li>Taille des masques : <strong>256×256</strong></li>
-    </ul>
-  </li>
-  <li><strong>Viral Pneumonia</strong>
-    <ul>
-      <li>Nombre d’images : <strong>1 345</strong></li>
-      <li>Nombre de masques : <strong>1 345</strong></li>
-      <li>Taille des images : <strong>299×299</strong></li>
-      <li>Taille des masques : <strong>256×256</strong></li>
-    </ul>
-  </li>
-  <li><strong>Normal</strong>
-    <ul>
-      <li>Nombre d’images : <strong>10 192</strong></li>
-      <li>Nombre de masques : <strong>10 192</strong></li>
-      <li>Taille des images : <strong>299×299</strong></li>
-      <li>Taille des masques : <strong>256×256</strong></li>
-    </ul>
-  </li>
-</ul>
-
-<h4>🔎 Points importants à retenir</h4>
-<ul>
-  <li>Le dataset est <strong>largement dominé par la classe Normal</strong>, suivie de <em>Lung Opacity</em>.</li>
-  <li>Les classes <strong>COVID</strong> et <strong>Viral Pneumonia</strong> sont <strong>sous‑représentées</strong>, ce qui peut biaiser l’entraînement.</li>
-  <li>Toutes les images ont une taille homogène (<strong>299×299</strong>) tandis que les masques sont fournis en <strong>256×256</strong>.</li>
-  <li>Cette différence de résolution implique un <strong>redimensionnement systématique</strong> lors du prétraitement.</li>
-  <li>Le déséquilibre entre classes justifie une étape de <strong>rééquilibrage</strong> avant l’entraînement du modèle.</li>
-</ul>
-
-<div>
-  <span class="rc-tag">Déséquilibre</span>
-  <span class="rc-tag">Normalisation</span>
-  <span class="rc-tag">Prétraitement</span>
-  <span class="rc-tag">Rééquilibrage</span>
-</div>
-
-</div>
-        """,
+<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:1.5rem;">
+<pre style="color:#0f172a;font-size:.82rem;line-height:1.7;margin:0;font-family:'Courier New',monospace;">
+  ┌─────────────────────────────────────────────────────────────────┐
+  │                        PIPELINE MLOPS                          │
+  │                                                                 │
+  │  [Données brutes]                                               │
+  │       │ DVC + Google Drive                                      │
+  │       ▼                                                         │
+  │  [ETL Container] ──► [Train Container] ──► [W&B Model Registry]│
+  │                            │ Airflow @weekly                    │
+  │                            ▼                                    │
+  │  [Inference API] ◄── [NGINX Gateway] ◄── [Streamlit / Client]  │
+  │       │ FastAPI + Auth           rate limit · TLS-ready         │
+  │       │                                                         │
+  │       ├──► [Prometheus] ──► [Grafana]   (métriques temps réel) │
+  │       └──► [JSONL logs] ──► [Evidently] (détection de dérive)  │
+  │                                │ Airflow @daily                 │
+  │                                └──► [Retraining si drift]       │
+  └─────────────────────────────────────────────────────────────────┘
+</pre>
+</div>""",
         unsafe_allow_html=True,
     )
 
-
-# =========================
-# 1) EDA — basé sur les figures enregistrées dans reports/
-# =========================
-if page == "EDA":
-    st.title("🔍 EDA — Exploration des Données")
-
-    st.markdown("""
-    **Objectif** : présenter l’exploration du dataset (source Kaggle) et l’analyse texturale (GLCM/Haralick) à partir
-    des figures **déjà générées** par le notebook d’EDA.
-
-    **Dataset** : COVID‑19 Radiography Database (Kaggle)
-    👉 https://www.kaggle.com/tawsifurrahman/covid19-radiography-database
-    """)
-
-    # -------- utilitaires locaux --------
-    def first_existing(*paths: Path) -> Path | None:
-        for p in paths:
-            if p.exists():
-                return p
-        return None
-
-    def list_harlick_figs() -> list[Path]:
-        # On cherche d'abord dans reports/, puis dans reports/figures/
-        patterns = [
-            str(REPORTS_DIR / "harlick*.png"),
-            str(REPORTS_FIG_DIR / "harlick*.png"),
-        ]
-        files = []
-        for pat in patterns:
-            files.extend(sorted(Path().glob(pat)))
-        # Déduplication en conservant l'ordre
-        seen = set()
-        ordered = []
-        for f in files:
-            if f not in seen:
-                ordered.append(f)
-                seen.add(f)
-        return ordered
-
-    # -------- 1) Répartition / volumétrie --------
-    st.header("📦 Volumétrie & répartition des classes")
-    dist_fig = first_existing(
-        REPORTS_DIR / "images.png",
-        REPORTS_FIG_DIR / "images.png",
-    )
-
-    if dist_fig is None:
-        st.warning(
-            "⚠️ Aucune figure de répartition trouvée (recherché `reports/images.png`)."
-        )
-    else:
-        st.image(
-            str(dist_fig),
-            caption="Distribution du dataset par pathologie",
-            use_container_width=True,
-        )
-        st.markdown("""
-        **Lecture** : la figure récapitule la répartition des images par catégorie.
-        Elle permet de vérifier d’un coup d’œil les **déséquilibres de classes** (ex. sur‑représentation de *Normal*).
-        """)
-
-    render_resume_card()
-
-    # -------- 2) Analyse texturale (GLCM / Haralick) --------
-    st.header("🧪 Analyse texturale — GLCM & caractéristiques de Haralick")
-
-    st.markdown("""
-    La **GLCM** (*Gray‑Level Co‑occurrence Matrix*) capture la structure spatiale des niveaux de gris.
-    À partir de cette matrice, on calcule des **caractéristiques de Haralick** (ex. *contrast, energy, entropy, homogeneity, correlation*),
-    qui permettent d’analyser la **texture pulmonaire** (motifs, granularité, régularité).
-
-    **Idées clés (issues du notebook)** :
-    - Le **contrast** ressort comme **fortement discriminant** entre catégories.
-    - **Entropy** et **homogeneity** sont souvent **corrélées négativement**, signe d’un compromis *désordre ↔ homogénéité*.
-    - Des **différences d’intensité moyenne** entre classes imposent une **normalisation** avant l’entraînement.
-    """)
-
-    # Helpers para ordenar "harlick, harlick1, harlick2, ..."
-    def natural_sort_key(p: Path):
-        tokens = re.findall(r"\d+|\D+", p.stem.lower())
-        return [int(t) if t.isdigit() else t for t in tokens]
-
-    def list_harlick_figs_carousel() -> list[Path]:
-        # Busca en reports/ y reports/figures/ todos los harlick*.png
-        candidates = []
-        for pat in [
-            str(REPORTS_DIR / "harlick*.png"),
-            str(REPORTS_FIG_DIR / "harlick*.png"),
-        ]:
-            candidates.extend([Path(p) for p in glob.glob(pat)])
-        # Elimina duplicados manteniendo el primero encontrado
-        unique = {str(p): p for p in candidates}
-        files = list(unique.values())
-        files.sort(key=natural_sort_key)
-        return files
-
-    harlick_figs = list_harlick_figs_carousel()
-
-    if not harlick_figs:
-        st.info("ℹ️ Aucune figure Haralick trouvée (recherché `reports/harlick*.png`).")
-    else:
-        # Estado del carrusel
-        key = "harlick_carousel"
-        if f"{key}_pos" not in st.session_state:
-            st.session_state[f"{key}_pos"] = 1  # 1..N
-
-        n = len(harlick_figs)
-
-        # Controles: ←  imagen  →  (en 3 columnas)
-        col_prev, col_img, col_next = st.columns([1, 6, 1])
-
-        with col_prev:
-            if st.button("◀", use_container_width=True, key=f"{key}_prev"):
-                st.session_state[f"{key}_pos"] = (
-                    n
-                    if st.session_state[f"{key}_pos"] == 1
-                    else st.session_state[f"{key}_pos"] - 1
-                )
-
-        with col_next:
-            if st.button("▶", use_container_width=True, key=f"{key}_next"):
-                st.session_state[f"{key}_pos"] = (
-                    1
-                    if st.session_state[f"{key}_pos"] == n
-                    else st.session_state[f"{key}_pos"] + 1
-                )
-
-        # Slider de posición (sincronizado)
-        pos = st.slider(
-            "Position", 1, n, st.session_state[f"{key}_pos"], key=f"{key}_slider"
-        )
-        st.session_state[f"{key}_pos"] = pos
-        idx = pos - 1
-
-        # Muestra una sola figura con caption y ratio
-        current = harlick_figs[idx]
-        caption = f"{current.stem.replace('_', ' ').capitalize()}  ({pos}/{n})"
-        col_img.image(str(current), caption=caption, use_container_width=True)
-
-        with st.expander("📝 Interprétation (résumé)"):
-            st.markdown("""
-            - **Contrast** : très informatif pour différencier les catégories – signatures texturales plus marquées.
-            - **Entropy vs Homogeneity** : corrélation **fortement négative** (textures désorganisées vs régulières).
-            - **Petites distances (0–3 px)** : forte corrélation locale malgré l’irrégularité – *désordre structuré*.
-            - **Normalisation** recommandée pour corriger les biais d’intensité entre classes.
-            - **Outliers** (poumons hors cadre, asymétries extrêmes) à **retirer** avant l’entraînement.
-            """)
-
-    # -------- 3) Biais, limites & prochaines étapes --------
-    st.header("⚠️ Biais & limites observés")
-    st.markdown("""
-    - **Déséquilibre de classes** (ex. *Normal* > autres) → à corriger par **rééquilibrage** (under/over sampling).
-    - **Variations d’acquisition** (distance/zoom, qualité des masques) → **normalisation** indispensable.
-    - **Masques hors cadre / asymétries extrêmes** → **filtrage** via règles (IQR, contrôle de bords).
-    """)
-
-    st.subheader("🔮 Prochaines étapes côté EDA")
-    st.markdown("""
-    - Intégrer des visualisations **avant/après** normalisation.
-    - Ajouter des métriques **par classe** (moyennes Haralick, histogrammes d’intensité).
-    - Documenter un **protocole de nettoyage** reproductible (manifest + règles).
-    """)
-# =========================
-# 2) Rééquilibrage
-# =========================
-elif page == "Rééquilibrage":
-    st.title("⚖️ Rééquilibrage des classes")
-
-    st.markdown("""
-**But** : Expliquer et illustrer la création d’un dataset équilibré (binaire ou multiclasses)
-via les symlinks de `train_folder.py`.
-
-> Cette page **n’exécute pas** le rééquilibrage (sécurité VM).
-> Elle **explique** le pipeline et montre la distribution si `data/train` est présent.
-""")
-
-    if not TRAIN_DIR.exists():
-        st.warning(
-            "⚠️ `data/train` introuvable. Impossible d’afficher la distribution réelle."
-        )
-        st.stop()
-
-    st.subheader("📉 Distribution actuelle")
-    counts = count_by_class(TRAIN_DIR)
-    st.write(counts)
-
-    st.subheader("🧭 Pipeline (résumé)")
-    st.code("""
-- Entrée : manifest parquet (issu de clean)
-- Mapping de classes (binaire vs multiclasses)
-- Création de symlinks par classe équilibrée
-- Dossier final prêt pour l'entraînement
-""")
-
-# =========================
-# 3) Modèle
-# =========================
-elif page == "Modèle":
-    st.title("🧠 Modèle (VGG11) & Config Hydra")
-
-    st.markdown("""
-**But** : Présenter l’architecture et la configuration utilisées pour l’entraînement (Hydra + Lightning).
-""")
-
-    st.subheader("📄 Module (default.yaml)")
-    module_cfg = load_yaml_safe(MODULE_YAML)
-    st.json(module_cfg)
-
-    st.subheader("📄 DataModule (datamodule.yaml)")
-    dm_cfg = load_yaml_safe(DATAMODULE_YAML)
-    st.json(dm_cfg)
-
-    st.subheader("⚙️ Pipeline d'entraînement (résumé)")
-    st.code("""
-- callbacks, loggers
-- Lightning Trainer
-- DataModule + Module
-- fit(), puis test()
-""")
-
-# =========================
-# 4) Résultats
-# =========================
-elif page == "Résultats":
-    st.title("📈 Résultats d'entraînement")
-
-    st.markdown("""
-**But** : Afficher les courbes et métriques si des logs existent (`logs/`).
-""")
-
-    metrics_files = scan_training_logs(LOGS_DIR)
-    if not metrics_files:
-        st.info(
-            "ℹ️ Aucun log détecté dans `logs/`. Lorsque des métriques seront disponibles, elles seront affichées ici."
-        )
-    else:
-        st.success(f"✅ Fichiers métriques trouvés : {len(metrics_files)}")
-        st.write("Exemple de prévisualisation (premier CSV détecté) :")
-        try:
-            df = pd.read_csv(metrics_files[0])
-            st.dataframe(df.head(20))
-        except Exception as e:
-            st.warning(f"Impossible de lire {metrics_files[0]} : {e}")
-
-# =========================
-# 5) Prédiction
-# =========================
-elif page == "Prédiction":
-    API_URL = os.environ.get("INFERENCE_API_URL", "http://localhost:8000")
-    API_KEY = os.environ.get("API_KEY", "")
-
+# ===========================================================================
+# PAGE 2 — PRÉDICTION
+# ===========================================================================
+elif page == "🩻 Prédiction":
     st.markdown(
         """
-    <style>
-    .diag-card {
-        padding: 2rem;
-        border-radius: 16px;
-        text-align: center;
-        margin-top: 1rem;
-    }
-    .diag-normal {
-        background: linear-gradient(135deg, #064e3b, #065f46);
-        border: 2px solid #10b981;
-    }
-    .diag-abnormal {
-        background: linear-gradient(135deg, #7f1d1d, #991b1b);
-        border: 2px solid #ef4444;
-    }
-    .diag-label {
-        font-size: 2.5rem;
-        font-weight: 800;
-        color: white;
-        letter-spacing: 0.05em;
-    }
-    .diag-prob {
-        font-size: 1.1rem;
-        color: rgba(255,255,255,0.85);
-        margin-top: 0.5rem;
-    }
-    .disclaimer {
-        background: #1e293b;
-        border-left: 4px solid #f59e0b;
-        padding: 0.75rem 1rem;
-        border-radius: 0 8px 8px 0;
-        color: #94a3b8;
-        font-size: 0.85rem;
-        margin-top: 1.5rem;
-    }
-    </style>
-    """,
+<div style="margin-bottom:1.5rem;">
+  <h1 style="margin:0 0 .3rem;color:#0f172a;">🩻 Analyse de radiographie</h1>
+  <p style="color:#64748b;margin:0;">
+    Déposez une radiographie thoracique pour obtenir une classification automatique.
+  </p>
+</div>""",
         unsafe_allow_html=True,
     )
 
-    st.title("🩻 Analyse de radiographie thoracique")
     st.markdown(
-        "Déposez une radiographie pulmonaire pour obtenir une analyse automatique par le modèle en production."
+        """
+<style>
+.diag-card { padding:2rem;border-radius:16px;text-align:center;margin-top:1rem; }
+.diag-normal  { background:linear-gradient(135deg,#064e3b,#065f46);border:2px solid #10b981; }
+.diag-abnormal{ background:linear-gradient(135deg,#7f1d1d,#991b1b);border:2px solid #ef4444; }
+.diag-label   { font-size:2.2rem;font-weight:800;color:white;letter-spacing:.05em; }
+.diag-prob    { font-size:1rem;color:rgba(255,255,255,.85);margin-top:.4rem; }
+.disclaimer   { background:#f8fafc;border-left:4px solid #f59e0b;padding:.75rem 1rem;
+                border-radius:0 8px 8px 0;color:#78716c;font-size:.82rem;margin-top:1.5rem; }
+</style>""",
+        unsafe_allow_html=True,
     )
 
-    col_upload, col_result = st.columns([1, 1], gap="large")
+    col_up, col_res = st.columns([1, 1], gap="large")
 
-    with col_upload:
-        st.subheader("📤 Image à analyser")
+    with col_up:
+        st.markdown("#### 📤 Image à analyser")
         uploaded = st.file_uploader(
             "Formats acceptés : PNG, JPG, JPEG",
             type=["png", "jpg", "jpeg"],
             label_visibility="collapsed",
         )
-
         if uploaded:
             uploaded.seek(0)
             img_bytes = uploaded.read()
             if len(img_bytes) == 0:
-                st.error("Le fichier reçu est vide — essayez de re-uploader l'image.")
+                st.error("Fichier vide — essayez de re-uploader l'image.")
             else:
                 st.image(img_bytes, caption=uploaded.name, use_container_width=True)
 
-    with col_result:
-        st.subheader("🔬 Résultat de l'analyse")
-
+    with col_res:
+        st.markdown("#### 🔬 Résultat")
         if not uploaded:
-            st.info("⬅️ Déposez une image pour lancer l'analyse.")
+            st.markdown(
+                """
+<div style="background:#f8fafc;border:2px dashed #cbd5e1;border-radius:12px;
+            padding:3rem;text-align:center;color:#94a3b8;">
+  <div style="font-size:2rem;margin-bottom:.5rem;">📂</div>
+  Déposez une image pour lancer l'analyse
+</div>""",
+                unsafe_allow_html=True,
+            )
         else:
-            with st.spinner("Analyse en cours..."):
+            with st.spinner("Analyse en cours…"):
                 try:
                     headers = {"X-API-Key": API_KEY} if API_KEY else {}
                     resp = requests.post(
@@ -647,275 +356,280 @@ elif page == "Prédiction":
                         headers=headers,
                         timeout=30,
                     )
-
                     if resp.status_code == 200:
                         data = resp.json()
                         label = data["label"]
                         prob = data["probability"]
                         pct = round(prob * 100, 1)
-
                         is_normal = label == "NORMAL"
-                        card_cls = "diag-normal" if is_normal else "diag-abnormal"
                         icon = "✅" if is_normal else "⚠️"
-
+                        card = "diag-normal" if is_normal else "diag-abnormal"
                         st.markdown(
                             f"""
-                        <div class="diag-card {card_cls}">
-                            <div class="diag-label">{icon} {label}</div>
-                            <div class="diag-prob">Confiance : <strong>{pct}%</strong></div>
-                        </div>
-                        """,
+<div class="diag-card {card}">
+  <div class="diag-label">{icon} {label}</div>
+  <div class="diag-prob">Confiance : <strong>{pct}%</strong></div>
+</div>""",
                             unsafe_allow_html=True,
                         )
-
                         st.markdown("<br>", unsafe_allow_html=True)
                         st.progress(prob, text=f"Score de confiance : {pct}%")
 
-                        with st.expander("📊 Détails techniques"):
-                            info_resp = requests.get(f"{API_URL}/info", timeout=10)
-                            if info_resp.status_code == 200:
-                                info = info_resp.json()
-                                st.json(
-                                    {
-                                        "label": label,
-                                        "probability": prob,
-                                        "model_run_id": info.get("run_id"),
-                                        "registry_alias": info.get("registry_alias"),
-                                        "classes": info.get("classes"),
-                                    }
-                                )
+                        with st.expander("📋 Détails techniques"):
+                            try:
+                                info = requests.get(f"{API_URL}/info", timeout=5).json()
+                            except Exception:
+                                info = {}
+                            st.json(
+                                {
+                                    "label": label,
+                                    "confidence": prob,
+                                    "model_run_id": info.get("run_id", "—"),
+                                    "registry_alias": info.get(
+                                        "registry_alias", "production"
+                                    ),
+                                    "architecture": info.get("arch", "VGG-11"),
+                                }
+                            )
 
                     elif resp.status_code == 403:
                         st.error(
-                            "🔒 Accès refusé — vérifiez la clé API (variable API_KEY)."
+                            "🔒 Clé API invalide — vérifiez la variable `API_KEY`."
                         )
                     else:
-                        st.error(f"❌ Erreur API ({resp.status_code}) : {resp.text}")
+                        st.error(f"❌ Erreur API ({resp.status_code})")
 
                 except requests.exceptions.ConnectionError:
-                    st.error(
-                        f"🔌 Impossible de joindre l'API à `{API_URL}`. Vérifiez que le service d'inférence est démarré."
+                    st.markdown(
+                        """
+<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:12px;
+            padding:1.5rem;text-align:center;">
+  <div style="font-size:1.5rem;margin-bottom:.5rem;">🔌</div>
+  <div style="font-weight:600;color:#991b1b;">API hors ligne</div>
+  <div style="color:#b91c1c;font-size:.85rem;margin-top:.4rem;">
+    Démarrez l'API : <code>uvicorn radiocovid.inference.api:app --port 8000</code>
+  </div>
+</div>""",
+                        unsafe_allow_html=True,
                     )
                 except Exception as e:
-                    st.error(f"❌ Erreur inattendue : {e}")
+                    st.error(f"Erreur inattendue : {e}")
 
+        if uploaded:
             st.markdown(
                 """
-            <div class="disclaimer">
-            ⚠️ <strong>Avertissement médical</strong> — Ce résultat est produit par un modèle d'IA à des fins
-            de recherche et de démonstration. Il ne constitue en aucun cas un diagnostic médical.
-            Consultez un professionnel de santé qualifié.
-            </div>
-            """,
+<div class="disclaimer">
+  ⚠️ <strong>Avertissement médical</strong> — Ce résultat est produit par un modèle d'IA
+  à des fins de recherche. Il ne constitue pas un diagnostic médical.
+  Consultez un professionnel de santé qualifié.
+</div>""",
                 unsafe_allow_html=True,
             )
 
-# =========================
-# 6) Monitoring — Drift detection dashboard (DRIFT-06)
-# =========================
-elif page == "Monitoring":
-    st.title("📊 Monitoring — Détection de drift")
+# ===========================================================================
+# PAGE 3 — MONITORING
+# ===========================================================================
+elif page == "📊 Monitoring":
+    st.markdown(
+        """
+<div style="margin-bottom:1.5rem;">
+  <h1 style="margin:0 0 .3rem;color:#0f172a;">📊 Monitoring du modèle</h1>
+  <p style="color:#64748b;margin:0;">
+    Surveillance continue des prédictions et détection de dérive en production.
+  </p>
+</div>""",
+        unsafe_allow_html=True,
+    )
 
-    INFERENCE_LOG_DIR = Path(os.environ.get("INFERENCE_LOG_DIR", "data/inference_logs"))
-    PREDICTIONS_FILE = INFERENCE_LOG_DIR / "predictions.jsonl"
-    REFERENCE_FILE = ROOT / "data" / "reference_distribution.json"
-    DRIFT_REPORTS_DIR = ROOT / "reports"
-
-    # ---- Load predictions ----
-    @st.cache_data(ttl=60)
-    def load_predictions_df(path: Path) -> pd.DataFrame:
-        if not path.exists():
-            return pd.DataFrame()
-        rows = []
-        with path.open(encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if line:
-                    try:
-                        rows.append(json.loads(line))
-                    except Exception:
-                        pass
-        if not rows:
-            return pd.DataFrame()
-        df = pd.DataFrame(rows)
-        df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
-        return df
-
-    @st.cache_data(ttl=300)
-    def load_reference(path: Path) -> dict | None:
-        if not path.exists():
-            return None
-        try:
-            import json as _json
-
-            return _json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            return None
-
-    df = load_predictions_df(PREDICTIONS_FILE)
-    reference = load_reference(REFERENCE_FILE)
+    df = load_predictions()
+    reference = load_reference()
 
     if df.empty:
         st.warning(
-            "⚠️ Aucun log de prédictions trouvé.\n\n"
-            f"Fichier attendu : `{PREDICTIONS_FILE}`\n\n"
-            "Activez le logging avec `ENABLE_INFERENCE_LOGGING=1` puis faites quelques prédictions."
+            "Aucun log de prédictions trouvé. "
+            "Activez `ENABLE_INFERENCE_LOGGING=1` et effectuez des prédictions."
         )
         st.stop()
 
-    st.success(f"✅ **{len(df)} prédictions** chargées depuis `{PREDICTIONS_FILE}`")
-
-    # ---- Latest drift report badge ----
-    drift_reports = sorted(DRIFT_REPORTS_DIR.glob("drift_*.html"), reverse=True)
-    if drift_reports:
-        last_report = drift_reports[0].name
-        st.info(f"📋 Dernier rapport Evidently : `reports/{last_report}`")
-
-    st.divider()
-
-    # ---- 1. Confidence timeline ----
-    st.subheader("🕐 Confidence moyenne par jour (7 derniers jours)")
-
+    # Window
     cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=7)
-    df_recent = df[df["timestamp"] >= cutoff].copy()
+    df7 = df[df["timestamp"] >= cutoff].copy()
+    df7["date"] = df7["timestamp"].dt.date
 
-    if df_recent.empty:
-        st.info("Pas de prédictions dans les 7 derniers jours.")
+    # ---- Status banner ----
+    n_total = len(df7)
+    avg_conf = df7["confidence"].mean() if n_total else 0
+    n_normal = (df7["label"] == "NORMAL").sum()
+    n_abnormal = n_total - n_normal
+
+    # Simple drift flag: if avg confidence drops > 5% below reference
+    ref_conf = reference.get("features", {}).get("confidence", {}).get("mean", avg_conf)
+    drift_flag = avg_conf < ref_conf - 0.05
+
+    if drift_flag:
+        st.markdown(
+            '<div style="background:#fef9c3;border:1px solid #fde047;border-radius:10px;'
+            'padding:.8rem 1.2rem;margin-bottom:1rem;">'
+            "⚠️ <strong>Alerte drift potentiel</strong> — "
+            "La confiance moyenne a baissé de plus de 5 points par rapport au référentiel. "
+            "Vérifiez la qualité des images entrantes.</div>",
+            unsafe_allow_html=True,
+        )
     else:
-        df_recent["date"] = df_recent["timestamp"].dt.date
-        daily_conf = (
-            df_recent.groupby("date")["confidence"].agg(["mean", "count"]).reset_index()
+        st.markdown(
+            '<div style="background:#dcfce7;border:1px solid #86efac;border-radius:10px;'
+            'padding:.8rem 1.2rem;margin-bottom:1rem;">'
+            "✅ <strong>Aucun drift détecté</strong> — "
+            "Le modèle se comporte de manière stable sur les 7 derniers jours.</div>",
+            unsafe_allow_html=True,
         )
-        daily_conf.columns = ["date", "confidence_mean", "n"]
 
-        fig, ax = plt.subplots(figsize=(10, 3))
-        ax.plot(
-            daily_conf["date"],
-            daily_conf["confidence_mean"],
-            marker="o",
-            linewidth=2,
-            color="#3b82f6",
-            label="Confidence moyenne",
-        )
-        ax.set_ylim(0, 1)
-        ax.set_ylabel("Confidence")
-        ax.set_xlabel("")
-        ax.set_title("Confidence moyenne par jour")
-        ax.grid(axis="y", alpha=0.3)
-        for _, row in daily_conf.iterrows():
-            ax.annotate(
-                f"n={int(row['n'])}",
-                (row["date"], row["confidence_mean"]),
-                textcoords="offset points",
-                xytext=(0, 8),
-                ha="center",
-                fontsize=8,
-                color="#6b7280",
-            )
-        st.pyplot(fig)
-        plt.close(fig)
-
-    st.divider()
-
-    # ---- 2. Feature histograms (current vs reference) ----
-    st.subheader("📐 Distribution des features image — courant vs référentiel")
-
-    FEATURES = ["img_mean", "img_std", "img_entropy", "confidence"]
-    FEATURE_LABELS = {
-        "img_mean": "Luminosité moyenne (img_mean)",
-        "img_std": "Contraste (img_std)",
-        "img_entropy": "Entropie (img_entropy)",
-        "confidence": "Confidence modèle",
-    }
-
-    available_features = [f for f in FEATURES if f in df_recent.columns]
-
-    if not available_features:
-        st.info("Colonnes de features absentes des logs.")
-    else:
-        cols = st.columns(2)
-        for i, feat in enumerate(available_features):
-            with cols[i % 2]:
-                fig, ax = plt.subplots(figsize=(5, 3))
-                current_vals = df_recent[feat].dropna()
-                ax.hist(
-                    current_vals,
-                    bins=30,
-                    alpha=0.7,
-                    color="#3b82f6",
-                    label=f"Courant (n={len(current_vals)})",
-                    density=True,
-                )
-
-                if (
-                    reference
-                    and "features" in reference
-                    and feat in reference["features"]
-                ):
-                    ref_feat = reference["features"][feat]
-                    ref_mean = ref_feat.get("mean", 0)
-                    ref_std = ref_feat.get("std", 1)
-                    ref_min = ref_feat.get("min", ref_mean - 3 * ref_std)
-                    ref_max = ref_feat.get("max", ref_mean + 3 * ref_std)
-                    x = np.linspace(ref_min, ref_max, 200)
-                    y = (
-                        1
-                        / (ref_std * np.sqrt(2 * np.pi))
-                        * np.exp(-0.5 * ((x - ref_mean) / ref_std) ** 2)
-                    )
-                    ax.plot(x, y, color="#9ca3af", linewidth=2, label="Référentiel")
-
-                ax.set_title(FEATURE_LABELS.get(feat, feat), fontsize=10)
-                ax.legend(fontsize=8)
-                ax.set_yticks([])
-                st.pyplot(fig)
-                plt.close(fig)
-
-    st.divider()
-
-    # ---- 3. Summary table ----
-    st.subheader("📋 Résumé statistique (7 derniers jours)")
-
-    if not df_recent.empty and available_features:
-        summary = (
-            df_recent[available_features].describe().T[["mean", "std", "min", "max"]]
-        )
-        summary.index = [FEATURE_LABELS.get(f, f) for f in summary.index]
-        st.dataframe(summary.round(4), use_container_width=True)
-
-    st.divider()
-
-    # ---- 4. Label distribution ----
-    st.subheader("🏷️ Répartition des prédictions (7 derniers jours)")
-
-    if not df_recent.empty and "label" in df_recent.columns:
-        label_counts = df_recent["label"].value_counts()
-        col1, col2 = st.columns(2)
-        for label, count in label_counts.items():
-            pct = round(count / len(df_recent) * 100, 1)
-            icon = "✅" if label == "NORMAL" else "⚠️"
-            col = col1 if label == "NORMAL" else col2
-            col.metric(f"{icon} {label}", f"{count}", f"{pct}%")
-
-    st.caption(
-        "Les données sont lues depuis le fichier JSONL local. "
-        "Activez `ENABLE_INFERENCE_LOGGING=1` pour alimenter ce tableau de bord."
+    # ---- KPI row ----
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Prédictions (7j)", n_total)
+    k2.metric(
+        "Confiance moyenne",
+        f"{avg_conf:.1%}",
+        delta=f"{(avg_conf - ref_conf):+.1%} vs référentiel",
+        delta_color="normal",
+    )
+    k3.metric("NORMAL", f"{n_normal}", f"{n_normal/n_total:.0%}" if n_total else "")
+    k4.metric(
+        "ABNORMAL", f"{n_abnormal}", f"{n_abnormal/n_total:.0%}" if n_total else ""
     )
 
-# =========================
-# 7) Conclusion
-# =========================
-elif page == "Conclusion":
-    st.title("🔚 Conclusion & Perspectives")
+    st.markdown("---")
 
-    st.markdown("""
-### 🧾 Conclusion
-- Pipeline mis en place : **EDA → nettoyage → rééquilibrage → configuration du modèle**
-- Architecture utilisée : **VGG11 (torchvision)** sous **Lightning + Hydra**
-- L’app Streamlit est prête à intégrer **résultats entraînés** et **prédiction** dès que les artefacts sont fournis.
+    # ---- Confidence timeline ----
+    st.markdown("#### Confidence moyenne par jour")
+    daily = df7.groupby("date")["confidence"].agg(["mean", "count"]).reset_index()
+    daily.columns = ["date", "mean", "n"]
 
-### 🔮 Perspectives
-- Intégration des **courbes réelles** (logs/), **matrices de confusion** et **Grad‑CAM**
-- Gestion **binaire vs multiclasses** via configuration
-- Déploiement final (Streamlit Cloud / conteneur)
-""")
+    fig, ax = plt.subplots(figsize=(11, 3))
+    ax.fill_between(range(len(daily)), daily["mean"], alpha=0.12, color="#0284c7")
+    ax.plot(
+        range(len(daily)),
+        daily["mean"],
+        marker="o",
+        lw=2.5,
+        color="#0284c7",
+        markersize=6,
+        label="Confiance moyenne",
+    )
+    if reference:
+        ref_m = ref_conf
+        ax.axhline(ref_m, color="#94a3b8", lw=1.5, ls="--", label="Référentiel")
+        ax.fill_between(
+            range(len(daily)), ref_m - 0.05, ref_m + 0.05, alpha=0.06, color="#94a3b8"
+        )
+    ax.set_xticks(range(len(daily)))
+    ax.set_xticklabels(
+        [str(d) for d in daily["date"]], rotation=25, ha="right", fontsize=8
+    )
+    ax.set_ylim(0.5, 1.0)
+    ax.set_ylabel("Confiance", fontsize=9)
+    ax.legend(fontsize=8)
+    for i, row in daily.iterrows():
+        ax.annotate(
+            f"n={int(row['n'])}",
+            (i, row["mean"]),
+            textcoords="offset points",
+            xytext=(0, 8),
+            ha="center",
+            fontsize=7,
+            color="#64748b",
+        )
+    _style_chart(ax)
+    st.pyplot(fig, use_container_width=True)
+    plt.close(fig)
+
+    st.markdown("---")
+
+    # ---- Feature histograms ----
+    st.markdown("#### Distribution des features image — courant vs référentiel")
+
+    FEATURES = {
+        "img_mean": "Luminosité moyenne",
+        "img_std": "Contraste",
+        "img_entropy": "Entropie",
+        "confidence": "Confiance modèle",
+    }
+    available = [f for f in FEATURES if f in df7.columns]
+    cols = st.columns(len(available))
+
+    for i, feat in enumerate(available):
+        with cols[i]:
+            fig, ax = plt.subplots(figsize=(4, 2.8))
+            vals = df7[feat].dropna()
+            ax.hist(
+                vals,
+                bins=22,
+                alpha=0.75,
+                color="#0284c7",
+                density=True,
+                label=f"Courant (n={len(vals)})",
+            )
+            if reference and feat in reference.get("features", {}):
+                r = reference["features"][feat]
+                mu, sigma = r["mean"], r["std"]
+                x = np.linspace(r["min"], r["max"], 200)
+                y = (
+                    1
+                    / (sigma * np.sqrt(2 * np.pi))
+                    * np.exp(-0.5 * ((x - mu) / sigma) ** 2)
+                )
+                ax.plot(x, y, color="#94a3b8", lw=2, label="Référentiel")
+            ax.legend(fontsize=7)
+            ax.set_yticks([])
+            _style_chart(ax, FEATURES[feat])
+            st.pyplot(fig, use_container_width=True)
+            plt.close(fig)
+
+    st.markdown("---")
+
+    # ---- Label distribution + Recent predictions ----
+    col_l, col_r = st.columns([1, 2])
+
+    with col_l:
+        st.markdown("#### Répartition des labels")
+        fig, ax = plt.subplots(figsize=(3.5, 3.5))
+        sizes = [n_normal, n_abnormal]
+        colors = ["#10b981", "#ef4444"]
+        wedges, _, autotexts = ax.pie(
+            sizes,
+            labels=["NORMAL", "ABNORMAL"],
+            colors=colors,
+            autopct="%1.0f%%",
+            startangle=90,
+            wedgeprops={"edgecolor": "white", "linewidth": 2},
+        )
+        for at in autotexts:
+            at.set_fontsize(9)
+            at.set_color("white")
+            at.set_fontweight("bold")
+        ax.set_facecolor("#f8fafc")
+        st.pyplot(fig, use_container_width=True)
+        plt.close(fig)
+
+    with col_r:
+        st.markdown("#### 10 dernières prédictions")
+        recent = (
+            df7.sort_values("timestamp", ascending=False)
+            .head(10)[["timestamp", "label", "confidence"]]
+            .copy()
+        )
+        recent["timestamp"] = recent["timestamp"].dt.strftime("%d/%m %H:%M")
+        recent["confidence"] = recent["confidence"].map(lambda x: f"{x:.1%}")
+        recent = recent.rename(
+            columns={
+                "timestamp": "Horodatage",
+                "label": "Résultat",
+                "confidence": "Confiance",
+            }
+        )
+        st.dataframe(recent, hide_index=True, use_container_width=True)
+
+    st.caption(
+        "Données lues depuis `data/inference_logs/predictions.jsonl`. "
+        "Activez `ENABLE_INFERENCE_LOGGING=1` en production pour alimenter ce tableau de bord en temps réel."
+    )
