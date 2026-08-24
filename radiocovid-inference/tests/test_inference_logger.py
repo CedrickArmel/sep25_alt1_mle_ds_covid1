@@ -25,7 +25,6 @@ import json
 import numpy as np
 import pytest
 from PIL import Image
-
 from radiocovid.inference.inference_logger import extract_image_features, log_prediction
 
 

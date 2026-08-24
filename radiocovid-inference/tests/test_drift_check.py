@@ -29,7 +29,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
-
 from radiocovid.inference.drift_check import (
     load_predictions,
     run_drift_analysis,
