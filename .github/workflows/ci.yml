@@ -124,3 +124,12 @@ jobs:
           file: docker/drift/Dockerfile
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/radiocovid-drift:latest
+
+      - name: Verify images on Docker Hub
+        if: steps.check.outputs.available == 'true'
+        run: |
+          docker manifest inspect ${{ secrets.DOCKERHUB_USERNAME }}/radiocovid-etl:latest
+          docker manifest inspect ${{ secrets.DOCKERHUB_USERNAME }}/radiocovid-train:latest
+          docker manifest inspect ${{ secrets.DOCKERHUB_USERNAME }}/radiocovid-inference:latest
+          docker manifest inspect ${{ secrets.DOCKERHUB_USERNAME }}/radiocovid-drift:latest
+          echo "✅ All 4 images verified on Docker Hub"
