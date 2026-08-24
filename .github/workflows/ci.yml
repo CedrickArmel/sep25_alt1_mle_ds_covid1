@@ -115,3 +115,12 @@ jobs:
           file: docker/inference/Dockerfile
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/radiocovid-inference:latest
+
+      - name: Build & push Drift image
+        if: steps.check.outputs.available == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/drift/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/radiocovid-drift:latest

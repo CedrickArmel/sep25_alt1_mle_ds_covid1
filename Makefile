@@ -107,7 +107,8 @@ export UVALIASES
 
 .PHONY: tpusetup gpusetup remove-tf uv pyenv venv reload test data-version data-ingest \
 	ingest-build build-reference \
-	airflow-build airflow-init airflow-up airflow-down airflow-logs
+	airflow-build airflow-init airflow-up airflow-down airflow-logs \
+	drift-build drift-run
 
 test:
 	@uv sync --group test
@@ -183,6 +184,20 @@ build-reference:
 		--data-dir $(DATA_DIR) \
 		--overwrite \
 		$(if $(filter 1,$(PUSH_WANDB)),--push-wandb,)
+
+# ---------------------------------------------------------------------------
+# Drift monitoring — build & run the drift-check container (DRIFT-04)
+# ---------------------------------------------------------------------------
+# Usage:
+#   make drift-build                   # build radiocovid-drift:0.1.0
+#   make drift-run                     # run drift check (reads from data/inference_logs/)
+#   RETRAIN_ON_DRIFT=1 make drift-run  # exit 1 if drift detected
+
+drift-build:
+	docker compose --profile drift build drift
+
+drift-run:
+	docker compose --profile drift run --rm drift
 
 tpusetup: tpuenvs remove-tf uv pyenv venv reload
 gpusetup: gpuenvs remove-tf uv pyenv venv reload

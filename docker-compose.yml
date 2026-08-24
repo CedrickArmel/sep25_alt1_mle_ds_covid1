@@ -67,6 +67,8 @@ services:
     image: radiocovid-inference:0.1.0
     expose:
       - "8000"
+    volumes:
+      - ./data/inference_logs:/data/inference_logs
     environment:
       WANDB_API_KEY: ${WANDB_API_KEY:-}
       WANDB_ENTITY: ${WANDB_ENTITY:-}
@@ -75,6 +77,8 @@ services:
       WANDB_REGISTRY_ALIAS: ${WANDB_REGISTRY_ALIAS:-production}
       WANDB_REGISTRY_SOURCE_PROJECT: ${WANDB_REGISTRY_SOURCE_PROJECT:-radiocovid}
       API_KEY: ${API_KEY:-}
+      ENABLE_INFERENCE_LOGGING: ${ENABLE_INFERENCE_LOGGING:-0}
+      INFERENCE_LOG_DIR: /data/inference_logs
     profiles:
       - inference
 
@@ -119,6 +123,30 @@ services:
       - prometheus
     profiles:
       - inference
+
+  # ---------------------------------------------------------------------------
+  # Drift monitoring — run_drift_check.py (profile: drift)
+  # ---------------------------------------------------------------------------
+
+  drift:
+    build:
+      context: .
+      dockerfile: docker/drift/Dockerfile
+    image: radiocovid-drift:0.1.0
+    volumes:
+      - .:/workspace
+    environment:
+      WANDB_API_KEY: ${WANDB_API_KEY:-}
+      WANDB_ENTITY: ${WANDB_ENTITY:-}
+      WANDB_PROJECT: ${WANDB_PROJECT:-radiologist}
+      ENABLE_WANDB_LOGGING: ${ENABLE_WANDB_LOGGING:-0}
+      INFERENCE_LOG_DIR: /workspace/${INFERENCE_LOG_DIR:-data/inference_logs}
+      DRIFT_WINDOW_DAYS: ${DRIFT_WINDOW_DAYS:-7}
+      DRIFT_MIN_SAMPLES: ${DRIFT_MIN_SAMPLES:-50}
+      DRIFT_FAIL_ON_DETECT: ${DRIFT_FAIL_ON_DETECT:-0}
+      DRIFT_REPORT_DIR: /workspace/${DRIFT_REPORT_DIR:-reports}
+    profiles:
+      - drift
 
   # ---------------------------------------------------------------------------
   # Ingest — image build target (triggered by Airflow DockerOperator)
@@ -209,6 +237,12 @@ services:
       INGEST_SKIP_PUSH: ${INGEST_SKIP_PUSH:-1}
       GIT_USER_NAME: ${GIT_USER_NAME:-airflow-bot}
       GIT_USER_EMAIL: ${GIT_USER_EMAIL:-airflow@localhost}
+      ENABLE_WANDB_LOGGING: ${ENABLE_WANDB_LOGGING:-0}
+      INFERENCE_LOG_DIR: ${INFERENCE_LOG_DIR:-data/inference_logs}
+      DRIFT_WINDOW_DAYS: ${DRIFT_WINDOW_DAYS:-7}
+      DRIFT_MIN_SAMPLES: ${DRIFT_MIN_SAMPLES:-50}
+      DRIFT_FAIL_ON_DETECT: ${DRIFT_FAIL_ON_DETECT:-0}
+      RETRAIN_ON_DRIFT: ${RETRAIN_ON_DRIFT:-0}
     volumes:
       - ./dags:/opt/airflow/dags
       - /var/run/docker.sock:/var/run/docker.sock
@@ -244,6 +278,12 @@ services:
       INGEST_SKIP_PUSH: ${INGEST_SKIP_PUSH:-1}
       GIT_USER_NAME: ${GIT_USER_NAME:-airflow-bot}
       GIT_USER_EMAIL: ${GIT_USER_EMAIL:-airflow@localhost}
+      ENABLE_WANDB_LOGGING: ${ENABLE_WANDB_LOGGING:-0}
+      INFERENCE_LOG_DIR: ${INFERENCE_LOG_DIR:-data/inference_logs}
+      DRIFT_WINDOW_DAYS: ${DRIFT_WINDOW_DAYS:-7}
+      DRIFT_MIN_SAMPLES: ${DRIFT_MIN_SAMPLES:-50}
+      DRIFT_FAIL_ON_DETECT: ${DRIFT_FAIL_ON_DETECT:-0}
+      RETRAIN_ON_DRIFT: ${RETRAIN_ON_DRIFT:-0}
     volumes:
       - ./dags:/opt/airflow/dags
       - /var/run/docker.sock:/var/run/docker.sock

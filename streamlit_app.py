@@ -22,6 +22,7 @@
 # SOFTWARE.
 
 import glob
+import json
 import os
 import re
 from pathlib import Path
@@ -43,7 +44,15 @@ st.set_page_config(
 )
 
 st.sidebar.title("🫁 Menu")
-PAGES = ["EDA", "Rééquilibrage", "Modèle", "Résultats", "Prédiction", "Conclusion"]
+PAGES = [
+    "EDA",
+    "Rééquilibrage",
+    "Modèle",
+    "Résultats",
+    "Prédiction",
+    "Monitoring",
+    "Conclusion",
+]
 page = st.sidebar.radio("Aller à :", PAGES)
 
 # =========================
@@ -702,7 +711,199 @@ elif page == "Prédiction":
             )
 
 # =========================
-# 6) Conclusion
+# 6) Monitoring — Drift detection dashboard (DRIFT-06)
+# =========================
+elif page == "Monitoring":
+    st.title("📊 Monitoring — Détection de drift")
+
+    INFERENCE_LOG_DIR = Path(os.environ.get("INFERENCE_LOG_DIR", "data/inference_logs"))
+    PREDICTIONS_FILE = INFERENCE_LOG_DIR / "predictions.jsonl"
+    REFERENCE_FILE = ROOT / "data" / "reference_distribution.json"
+    DRIFT_REPORTS_DIR = ROOT / "reports"
+
+    # ---- Load predictions ----
+    @st.cache_data(ttl=60)
+    def load_predictions_df(path: Path) -> pd.DataFrame:
+        if not path.exists():
+            return pd.DataFrame()
+        rows = []
+        with path.open(encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if line:
+                    try:
+                        rows.append(json.loads(line))
+                    except Exception:
+                        pass
+        if not rows:
+            return pd.DataFrame()
+        df = pd.DataFrame(rows)
+        df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
+        return df
+
+    @st.cache_data(ttl=300)
+    def load_reference(path: Path) -> dict | None:
+        if not path.exists():
+            return None
+        try:
+            import json as _json
+
+            return _json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+
+    df = load_predictions_df(PREDICTIONS_FILE)
+    reference = load_reference(REFERENCE_FILE)
+
+    if df.empty:
+        st.warning(
+            "⚠️ Aucun log de prédictions trouvé.\n\n"
+            f"Fichier attendu : `{PREDICTIONS_FILE}`\n\n"
+            "Activez le logging avec `ENABLE_INFERENCE_LOGGING=1` puis faites quelques prédictions."
+        )
+        st.stop()
+
+    st.success(f"✅ **{len(df)} prédictions** chargées depuis `{PREDICTIONS_FILE}`")
+
+    # ---- Latest drift report badge ----
+    drift_reports = sorted(DRIFT_REPORTS_DIR.glob("drift_*.html"), reverse=True)
+    if drift_reports:
+        last_report = drift_reports[0].name
+        st.info(f"📋 Dernier rapport Evidently : `reports/{last_report}`")
+
+    st.divider()
+
+    # ---- 1. Confidence timeline ----
+    st.subheader("🕐 Confidence moyenne par jour (7 derniers jours)")
+
+    cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=7)
+    df_recent = df[df["timestamp"] >= cutoff].copy()
+
+    if df_recent.empty:
+        st.info("Pas de prédictions dans les 7 derniers jours.")
+    else:
+        df_recent["date"] = df_recent["timestamp"].dt.date
+        daily_conf = (
+            df_recent.groupby("date")["confidence"].agg(["mean", "count"]).reset_index()
+        )
+        daily_conf.columns = ["date", "confidence_mean", "n"]
+
+        fig, ax = plt.subplots(figsize=(10, 3))
+        ax.plot(
+            daily_conf["date"],
+            daily_conf["confidence_mean"],
+            marker="o",
+            linewidth=2,
+            color="#3b82f6",
+            label="Confidence moyenne",
+        )
+        ax.set_ylim(0, 1)
+        ax.set_ylabel("Confidence")
+        ax.set_xlabel("")
+        ax.set_title("Confidence moyenne par jour")
+        ax.grid(axis="y", alpha=0.3)
+        for _, row in daily_conf.iterrows():
+            ax.annotate(
+                f"n={int(row['n'])}",
+                (row["date"], row["confidence_mean"]),
+                textcoords="offset points",
+                xytext=(0, 8),
+                ha="center",
+                fontsize=8,
+                color="#6b7280",
+            )
+        st.pyplot(fig)
+        plt.close(fig)
+
+    st.divider()
+
+    # ---- 2. Feature histograms (current vs reference) ----
+    st.subheader("📐 Distribution des features image — courant vs référentiel")
+
+    FEATURES = ["img_mean", "img_std", "img_entropy", "confidence"]
+    FEATURE_LABELS = {
+        "img_mean": "Luminosité moyenne (img_mean)",
+        "img_std": "Contraste (img_std)",
+        "img_entropy": "Entropie (img_entropy)",
+        "confidence": "Confidence modèle",
+    }
+
+    available_features = [f for f in FEATURES if f in df_recent.columns]
+
+    if not available_features:
+        st.info("Colonnes de features absentes des logs.")
+    else:
+        cols = st.columns(2)
+        for i, feat in enumerate(available_features):
+            with cols[i % 2]:
+                fig, ax = plt.subplots(figsize=(5, 3))
+                current_vals = df_recent[feat].dropna()
+                ax.hist(
+                    current_vals,
+                    bins=30,
+                    alpha=0.7,
+                    color="#3b82f6",
+                    label=f"Courant (n={len(current_vals)})",
+                    density=True,
+                )
+
+                if (
+                    reference
+                    and "features" in reference
+                    and feat in reference["features"]
+                ):
+                    ref_feat = reference["features"][feat]
+                    ref_mean = ref_feat.get("mean", 0)
+                    ref_std = ref_feat.get("std", 1)
+                    ref_min = ref_feat.get("min", ref_mean - 3 * ref_std)
+                    ref_max = ref_feat.get("max", ref_mean + 3 * ref_std)
+                    x = np.linspace(ref_min, ref_max, 200)
+                    y = (
+                        1
+                        / (ref_std * np.sqrt(2 * np.pi))
+                        * np.exp(-0.5 * ((x - ref_mean) / ref_std) ** 2)
+                    )
+                    ax.plot(x, y, color="#9ca3af", linewidth=2, label="Référentiel")
+
+                ax.set_title(FEATURE_LABELS.get(feat, feat), fontsize=10)
+                ax.legend(fontsize=8)
+                ax.set_yticks([])
+                st.pyplot(fig)
+                plt.close(fig)
+
+    st.divider()
+
+    # ---- 3. Summary table ----
+    st.subheader("📋 Résumé statistique (7 derniers jours)")
+
+    if not df_recent.empty and available_features:
+        summary = (
+            df_recent[available_features].describe().T[["mean", "std", "min", "max"]]
+        )
+        summary.index = [FEATURE_LABELS.get(f, f) for f in summary.index]
+        st.dataframe(summary.round(4), use_container_width=True)
+
+    st.divider()
+
+    # ---- 4. Label distribution ----
+    st.subheader("🏷️ Répartition des prédictions (7 derniers jours)")
+
+    if not df_recent.empty and "label" in df_recent.columns:
+        label_counts = df_recent["label"].value_counts()
+        col1, col2 = st.columns(2)
+        for label, count in label_counts.items():
+            pct = round(count / len(df_recent) * 100, 1)
+            icon = "✅" if label == "NORMAL" else "⚠️"
+            col = col1 if label == "NORMAL" else col2
+            col.metric(f"{icon} {label}", f"{count}", f"{pct}%")
+
+    st.caption(
+        "Les données sont lues depuis le fichier JSONL local. "
+        "Activez `ENABLE_INFERENCE_LOGGING=1` pour alimenter ce tableau de bord."
+    )
+
+# =========================
+# 7) Conclusion
 # =========================
 elif page == "Conclusion":
     st.title("🔚 Conclusion & Perspectives")
