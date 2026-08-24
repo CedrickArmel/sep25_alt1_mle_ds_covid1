@@ -184,26 +184,49 @@ def _registry_artifact(entity: str, registry: str, registry_model: str, alias: s
 # API HELPERS ✅
 # -------------------------------
 def load_model():
-    entity = os.environ.get("WANDB_ENTITY", "yebouetc")
-    registry = os.environ.get("WANDB_REGISTRY", "radiocovid-classifier")
-    registry_model = os.environ.get("WANDB_REGISTRY_MODEL", "radiocovid-classifier")
-    registry_alias = os.environ.get("WANDB_REGISTRY_ALIAS", "production")
+    global CLASSES
+    # Local-path override: set MODEL_CKPT_PATH to skip W&B registry lookup entirely.
+    local_ckpt = os.environ.get("MODEL_CKPT_PATH")
+    if local_ckpt:
+        checkpoint_path = Path(local_ckpt)
+        if not checkpoint_path.exists():
+            raise RuntimeError(f"MODEL_CKPT_PATH not found: {checkpoint_path}")
+        meta = {
+            "run_id": "local",
+            "entity": "local",
+            "registry": "local",
+            "registry_model": "local",
+            "registry_alias": "local",
+            "registry_artifact": checkpoint_path.name,
+            "source_name": checkpoint_path.name,
+            "source_project": "local",
+            "classes": CLASSES,
+            "downloaded_from": "local",
+        }
+        logger.info(f"Loading model from local path: {checkpoint_path}")
+    else:
+        entity = os.environ.get("WANDB_ENTITY", "yebouetc")
+        registry = os.environ.get("WANDB_REGISTRY", "radiocovid-classifier")
+        registry_model = os.environ.get("WANDB_REGISTRY_MODEL", "radiocovid-classifier")
+        registry_alias = os.environ.get("WANDB_REGISTRY_ALIAS", "production")
 
-    artifact, meta = _registry_artifact(
-        entity, registry, registry_model, registry_alias
-    )
+        artifact, meta = _registry_artifact(
+            entity, registry, registry_model, registry_alias
+        )
 
-    import wandb
+        import wandb
 
-    api = wandb.Api(overrides={"entity": entity})
-    artifact_dir, download_from = _download_artifact(api, entity, artifact)
-    meta["downloaded_from"] = download_from
+        api = wandb.Api(overrides={"entity": entity})
+        artifact_dir, download_from = _download_artifact(api, entity, artifact)
+        meta["downloaded_from"] = download_from
 
-    ckpt_files = list(artifact_dir.glob("*.ckpt"))
-    if not ckpt_files:
-        raise RuntimeError(f"No .ckpt file found after download from {download_from}")
+        ckpt_files = list(artifact_dir.glob("*.ckpt"))
+        if not ckpt_files:
+            raise RuntimeError(
+                f"No .ckpt file found after download from {download_from}"
+            )
 
-    checkpoint_path = ckpt_files[0]
+        checkpoint_path = ckpt_files[0]
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Read num_classes directly from the checkpoint to avoid size mismatches
@@ -217,7 +240,6 @@ def load_model():
     logger.info(f"Detected {num_classes} classes from checkpoint")
 
     # Build generic class labels if the checkpoint doesn't match our default list
-    global CLASSES
     if num_classes != len(CLASSES):
         CLASSES = [f"class_{i}" for i in range(num_classes)]
         logger.warning(
