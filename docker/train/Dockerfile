@@ -10,12 +10,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxrender1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Large CUDA wheels (~1GB+) — raise timeout/retries to avoid flaky ReadTimeoutError
+# CPU-only PyTorch (demo/CI environment — GPU training runs on dedicated infra)
 RUN pip install --upgrade pip \
     && pip install --no-cache-dir --default-timeout=1000 --retries 10 \
-        torch==2.7.0+cu128 \
-        torchvision==0.22.0+cu128 \
-        --extra-index-url https://download.pytorch.org/whl/cu128
+        torch==2.7.0+cpu \
+        torchvision==0.22.0+cpu \
+        --extra-index-url https://download.pytorch.org/whl/cpu
 
 RUN pip install --no-cache-dir --default-timeout=1000 --retries 10 radiocovid-core==0.1.2 \
     && pip install --no-cache-dir --default-timeout=1000 --retries 10 "dvc>=3.66.1" "dvc-gdrive>=3.0.1"

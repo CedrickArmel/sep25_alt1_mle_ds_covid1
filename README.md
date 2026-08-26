@@ -519,6 +519,88 @@ curl -X POST http://localhost:8000/reload
 
 **Override the registry path** (optional): set `WANDB_REGISTRY_ARTIFACT` in `.env` to the full path copied from the W&B registry Usage tab.
 
+### Step 6 — Launch the Streamlit dashboard
+
+The monitoring dashboard provides a user-facing prediction interface and a production monitoring page.
+
+**Prerequisites:** the inference API must be running (Step 5).
+
+```shell
+# Install Streamlit (once)
+pip install streamlit matplotlib pandas requests
+
+# Launch
+streamlit run streamlit_app.py
+```
+
+The app is accessible at `http://localhost:8501` (or the server's external IP if deployed remotely).
+
+| Variable | Default | Description |
+|---|---|---|
+| `INFERENCE_API_URL` | `http://localhost:8000` | URL of the inference API |
+| `API_KEY` | _(empty)_ | API key sent as `X-API-Key` header — must match the value set in `.env` |
+| `INFERENCE_LOG_DIR` | `data/inference_logs` | Directory read by the Monitoring page |
+
+**Demo credentials** (for the professor demo environment):
+
+| Variable | Value |
+|---|---|
+| `API_KEY` | `radiocovid-demo-2026` |
+| `INFERENCE_API_URL` | `http://localhost:8000` |
+
+**Streamlit login credentials:**
+
+| Utilisateur | Mot de passe | Accès |
+|---|---|---|
+| `admin` | `admin2026` | Accueil, Prédiction, Monitoring |
+| `user` | `user2026` | Prédiction uniquement |
+
+To run with explicit env vars:
+
+```shell
+API_KEY=radiocovid-demo-2026 streamlit run streamlit_app.py
+```
+
+### Step 7 — Launch Prometheus and Grafana
+
+Prometheus scrapes the `/metrics` endpoint of the inference API every 15 seconds. Grafana reads from Prometheus and displays the "RadioCovid — Inference API" dashboard.
+
+**When running outside Docker** (API launched with uvicorn directly), start Prometheus and Grafana with:
+
+```shell
+HOST_IP=$(hostname -I | awk '{print $1}')
+
+# Update Prometheus target to host IP (only needed once, already set if you cloned this repo)
+# docker/prometheus/prometheus.yml → targets: ["<HOST_IP>:8000"]
+
+docker run -d --name radiocovid_prometheus \
+  -p 9090:9090 \
+  -v "$(pwd)/docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro" \
+  prom/prometheus:v2.53.0
+
+docker volume create grafana_data
+docker run -d --name radiocovid_grafana \
+  -p 3000:3000 \
+  -e GF_SECURITY_ADMIN_PASSWORD=admin \
+  -e GF_USERS_ALLOW_SIGN_UP=false \
+  -v grafana_data:/var/lib/grafana \
+  -v "$(pwd)/docker/grafana/provisioning:/etc/grafana/provisioning:ro" \
+  grafana/grafana:11.1.0
+```
+
+**Important:** the datasource URL in `docker/grafana/provisioning/datasources/prometheus.yml` must point to the host IP (not `prometheus:9090`, which only resolves inside a Docker Compose network). Replace `172.31.43.63` with the actual host IP if deploying on a different machine.
+
+| Service | URL | Credentials |
+|---|---|---|
+| Prometheus | `http://<HOST>:9090` | — |
+| Grafana | `http://<HOST>:3000` | `admin` / `admin` |
+
+The dashboard "RadioCovid — Inference API" is provisioned automatically and shows:
+- Requests per second and p95 latency
+- 5xx error rate and 403 (auth refused) rate
+- Throughput and latency time series (p50 · p95 · p99)
+- HTTP response codes over time
+
 ### Rebuilding an image after a package update
 
 ```shell
@@ -563,6 +645,72 @@ make airflow-up
 # UI → http://localhost:8080  (admin / admin)
 make airflow-logs
 make airflow-down
+```
+
+### Step 8 — Drift monitoring
+
+The drift pipeline detects when the distribution of incoming radiographies diverges from the training data, which could silently degrade model performance.
+
+#### How it works
+
+1. **Logging** — every call to `/predict` logs image features (mean luminosity, contrast, entropy) and the confidence score to `data/inference_logs/predictions.jsonl` when `ENABLE_INFERENCE_LOGGING=1`.
+2. **Reference** — a JSON file `data/reference_distribution.json` captures the feature statistics (mean, std, p5, p95) computed from the training/validation dataset at training time. It is the baseline the drift detector compares against.
+3. **Detection** — `drift_check.py` loads the last N days of predictions, generates a synthetic reference dataset from the JSON stats, and runs a KS (Kolmogorov–Smirnov) test per feature using Evidently. If more than `DRIFT_MIN_FEATURES` features drift, `drift_detected = True`.
+4. **Alerting** — the Airflow DAG `radiocovid_monitoring` runs this check daily. If drift is detected and `RETRAIN_ON_DRIFT=1`, it automatically triggers `radiocovid_pipeline` to retrain the model.
+5. **Dashboard** — the Streamlit Monitoring page reads the same JSONL log and shows confidence trends and feature distributions in real time.
+
+#### Environment variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `ENABLE_INFERENCE_LOGGING` | `0` | Set to `1` to activate prediction logging |
+| `INFERENCE_LOG_DIR` | `data/inference_logs` | Directory for `predictions.jsonl` |
+| `DRIFT_WINDOW_DAYS` | `7` | How many days of recent predictions to analyse |
+| `DRIFT_MIN_SAMPLES` | `50` | Minimum predictions required before running a check |
+| `DRIFT_FAIL_ON_DETECT` | `0` | Exit code 1 on drift (used by Airflow to trigger retraining) |
+| `RETRAIN_ON_DRIFT` | `0` | Set to `1` to auto-trigger `radiocovid_pipeline` when drift is detected |
+| `DRIFT_REPORT_DIR` | `reports/` | Where to save Evidently HTML reports |
+
+#### Build and run the drift container manually
+
+```shell
+# Build
+make drift-build
+
+# Run a one-shot drift check (reads data/inference_logs/predictions.jsonl)
+make drift-run
+
+# Run with automatic retraining if drift is detected
+RETRAIN_ON_DRIFT=1 make drift-run
+```
+
+#### Airflow DAG — radiocovid_monitoring
+
+The DAG `radiocovid_monitoring` runs daily at midnight and has two tasks:
+
+```
+check_drift  ──(exit 0 = no drift)──►  [end]
+             ──(exit 1 = drift)──────►  trigger_retrain  ──►  radiocovid_pipeline
+```
+
+`trigger_retrain` uses `trigger_rule="all_failed"` so it only fires when `check_drift` exits with code 1 (drift detected). The exit code is controlled by `DRIFT_FAIL_ON_DETECT`, which is set equal to `RETRAIN_ON_DRIFT` in the DAG — meaning retraining only happens when the user explicitly opts in.
+
+#### Building the reference distribution
+
+The reference JSON must be regenerated after each model retraining. Run:
+
+```shell
+python scripts/build_reference.py \
+  --data-dir data/train_folder/val \
+  --output data/reference_distribution.json
+```
+
+Or via Make:
+
+```shell
+make build-reference
+# Custom data dir:
+make build-reference DATA_DIR=data/train_folder/test
 ```
 
 ---

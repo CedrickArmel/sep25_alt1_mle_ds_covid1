@@ -199,6 +199,17 @@ drift-build:
 drift-run:
 	docker compose --profile drift run --rm drift
 
+# NGINX — self-signed TLS certificate (demo only, no real domain needed)
+# Run once before make airflow-up / docker compose --profile inference up
+nginx-certs:
+	mkdir -p docker/nginx/certs
+	openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+	  -keyout docker/nginx/certs/server.key \
+	  -out  docker/nginx/certs/server.crt \
+	  -subj "/C=FR/ST=Paris/L=Paris/O=RadioCovid/CN=$(shell hostname -I | awk '{print $$1}')" \
+	  -addext "subjectAltName=IP:$(shell hostname -I | awk '{print $$1}')"
+	@echo "Certificat généré dans docker/nginx/certs/"
+
 tpusetup: tpuenvs remove-tf uv pyenv venv reload
 gpusetup: gpuenvs remove-tf uv pyenv venv reload
 cpusetup: remove-tf uv pyenv venv reload

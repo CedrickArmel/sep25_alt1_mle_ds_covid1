@@ -207,3 +207,6 @@ artifacts/
 
 # Entraînements locaux (non versionnés)
 tests_perso/
+docker/nginx/certs/
+.airflow/
+*.whl

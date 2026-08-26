@@ -89,6 +89,9 @@ services:
     image: radiocovid-nginx:1.0.0
     ports:
       - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/certs:/etc/nginx/certs:ro
     depends_on:
       - inference
     profiles:

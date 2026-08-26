@@ -50,7 +50,7 @@ PREDICTIONS_FILE = INFERENCE_LOG_DIR / "predictions.jsonl"
 REFERENCE_FILE = ROOT / "data" / "reference_distribution.json"
 
 # ---------------------------------------------------------------------------
-# Auth — credentials stored as sha256 hashes
+# Auth: credentials stored as sha256 hashes
 # ---------------------------------------------------------------------------
 _USERS = {
     "admin": {
@@ -184,7 +184,7 @@ if not st.session_state.logged_in:
     st.stop()
 
 # ===========================================================================
-# AUTHENTICATED — Sidebar
+# AUTHENTICATED: Sidebar
 # ===========================================================================
 role = st.session_state.role
 
@@ -264,7 +264,7 @@ def load_predictions() -> pd.DataFrame:
     if not rows:
         return pd.DataFrame()
     df = pd.DataFrame(rows)
-    df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
+    df["timestamp"] = pd.to_datetime(df["timestamp"], format="ISO8601", utc=True)
     return df
 
 
@@ -530,31 +530,248 @@ elif page == "Prédiction":
 # MONITORING  (admin only)
 # ===========================================================================
 elif page == "Monitoring":
+    AIRFLOW_URL = os.environ.get("AIRFLOW_URL", "http://localhost:8080")
+    AIRFLOW_USER = os.environ.get("AIRFLOW_USER", "admin")
+    AIRFLOW_PASS = os.environ.get("AIRFLOW_PASS", "admin")
+    WANDB_ENTITY = os.environ.get("WANDB_ENTITY", "")
+    WANDB_API_KEY_VAL = os.environ.get("WANDB_API_KEY", "")
+
     st.markdown(
-        "<h2 style='margin-bottom:.3rem;color:#0f172a;'>Monitoring du modèle</h2>"
+        "<h2 style='margin-bottom:.3rem;color:#0f172a;'>Monitoring</h2>"
         "<p style='color:#64748b;margin:0 0 1.5rem;font-size:.95rem;'>"
-        "Surveillance continue des prédictions et détection de dérive en production.</p>",
+        "État du modèle, des pipelines et des prédictions en production.</p>",
         unsafe_allow_html=True,
     )
 
-    # Retraining panel
-    with st.expander("Lancer un réentraînement"):
-        st.markdown(
-            "<p style='color:#475569;font-size:.9rem;margin-bottom:1rem;'>"
-            "Force le rechargement du modèle depuis le W&amp;B Model Registry. "
-            "En production, ce bouton déclenche le DAG Airflow de réentraînement complet.</p>",
-            unsafe_allow_html=True,
+    # -----------------------------------------------------------------------
+    # 1. Modèle en production (W&B)
+    # -----------------------------------------------------------------------
+    st.markdown("**Modèle en production**")
+
+    @st.cache_data(ttl=120)
+    def load_wandb_production():
+        try:
+            import wandb
+
+            api = wandb.Api()
+            registry = os.environ.get("WANDB_REGISTRY", "Radiocovid-classifier")
+            model_name = os.environ.get("WANDB_REGISTRY_MODEL", "radiocovid-classifier")
+            alias = os.environ.get("WANDB_REGISTRY_ALIAS", "production")
+            collection = api.artifact_collection(
+                type_name="model",
+                name=f"wandb-registry-{registry}/{model_name}",
+            )
+            for art in collection.versions():
+                if alias in (art.aliases or []):
+                    run = art.logged_by()
+                    summary = run.summary if run else {}
+                    return {
+                        "version": art.version,
+                        "created_at": art.created_at,
+                        "run_id": run.id if run else "—",
+                        "f1": summary.get("best_val_score", summary.get("val_f1", "—")),
+                        "accuracy": summary.get("val_accuracy", "—"),
+                        "loss": summary.get("val_loss", "—"),
+                    }
+        except Exception:
+            pass
+        # Fallback: read from /info endpoint
+        try:
+            info = requests.get(f"{API_URL}/info", timeout=4).json()
+            return {
+                "version": info.get("registry_alias", "production"),
+                "created_at": "—",
+                "run_id": info.get("run_id", "—"),
+                "f1": "—",
+                "accuracy": "—",
+                "loss": "—",
+            }
+        except Exception:
+            return None
+
+    prod = load_wandb_production()
+    if prod:
+        w1, w2, w3, w4 = st.columns(4)
+        w1.metric("Version", prod["version"])
+        w2.metric(
+            "Run ID",
+            (
+                str(prod["run_id"])[:10] + "…"
+                if len(str(prod["run_id"])) > 10
+                else str(prod["run_id"])
+            ),
         )
-        if st.button("Recharger le modèle", type="primary"):
+        f1_val = (
+            f"{prod['f1']:.3f}" if isinstance(prod["f1"], float) else str(prod["f1"])
+        )
+        acc_val = (
+            f"{prod['accuracy']:.1%}"
+            if isinstance(prod["accuracy"], float)
+            else str(prod["accuracy"])
+        )
+        w3.metric("F1 (val)", f1_val)
+        w4.metric("Accuracy (val)", acc_val)
+        if prod["created_at"] != "—":
+            st.caption(f"Enregistré le {prod['created_at']}")
+    else:
+        st.info(
+            "Informations WInformations W&B non disponibles — vérifiezB non disponibles. Verifiez WANDB_API_KEY et WANDB_ENTITY."
+        )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # -----------------------------------------------------------------------
+    # 2. État des pipelines Airflow
+    # -----------------------------------------------------------------------
+    st.markdown("**État des pipelines**")
+
+    @st.cache_data(ttl=30)
+    def load_dag_status(dag_id):
+        try:
+            r = requests.get(
+                f"{AIRFLOW_URL}/api/v1/dags/{dag_id}/dagRuns",
+                auth=(AIRFLOW_USER, AIRFLOW_PASS),
+                params={"limit": 1, "order_by": "-execution_date"},
+                timeout=4,
+            )
+            if r.status_code == 404:
+                return {"state": "not_deployed", "start": "—", "end": "—"}
+            if r.status_code == 200:
+                runs = r.json().get("dag_runs", [])
+                if not runs:
+                    return {"state": "no_runs", "start": "—", "end": "—"}
+                run = runs[0]
+                return {
+                    "state": run["state"],
+                    "start": run.get("start_date", "—")[:16].replace("T", " "),
+                    "end": (
+                        run.get("end_date", "—")[:16].replace("T", " ")
+                        if run.get("end_date")
+                        else "—"
+                    ),
+                }
+        except Exception:
+            pass
+        return None
+
+    def _state_badge(state):
+        colors = {
+            "success": "#166534",
+            "failed": "#991b1b",
+            "running": "#1e40af",
+            "queued": "#92400e",
+            "not_deployed": "#475569",
+            "no_runs": "#475569",
+        }
+        bg = {
+            "success": "#f0fdf4",
+            "failed": "#fef2f2",
+            "running": "#eff6ff",
+            "queued": "#fffbeb",
+            "not_deployed": "#f1f5f9",
+            "no_runs": "#f1f5f9",
+        }
+        labels = {
+            "not_deployed": "non déployé",
+            "no_runs": "aucun run",
+        }
+        c = colors.get(state, "#334155")
+        b = bg.get(state, "#f8fafc")
+        display = labels.get(state, state)
+        return f"<span style='background:{b};color:{c};padding:2px 10px;border-radius:4px;font-size:.82rem;font-weight:600;'>{display}</span>"
+
+    dags = {
+        "radiocovid_pipeline": "Pipeline principal (Ingest > Train > Promote)",
+        "radiocovid_monitoring": "Monitoring drift (quotidien)",
+    }
+    for dag_id, label in dags.items():
+        status = load_dag_status(dag_id)
+        if status:
+            st.markdown(
+                f"<div style='display:flex;align-items:center;gap:1rem;padding:.5rem 0;"
+                f"border-bottom:1px solid #f1f5f9;'>"
+                f"<span style='color:#0f172a;font-size:.88rem;flex:1;'>{label}</span>"
+                f"{_state_badge(status['state'])}"
+                f"<span style='color:#94a3b8;font-size:.78rem;'>Dernier run : {status['start']}</span>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                f"<div style='display:flex;align-items:center;gap:1rem;padding:.5rem 0;"
+                f"border-bottom:1px solid #f1f5f9;'>"
+                f"<span style='color:#0f172a;font-size:.88rem;flex:1;'>{label}</span>"
+                f"<span style='color:#94a3b8;font-size:.82rem;'>Airflow non joignable</span>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # -----------------------------------------------------------------------
+    # 3. Actions
+    # -----------------------------------------------------------------------
+    st.markdown("**Actions**")
+
+    def _trigger_dag(dag_id):
+        try:
+            r = requests.post(
+                f"{AIRFLOW_URL}/api/v1/dags/{dag_id}/dagRuns",
+                auth=(AIRFLOW_USER, AIRFLOW_PASS),
+                json={"conf": {}},
+                timeout=5,
+            )
+            if r.status_code == 404:
+                return False, f"DAG '{dag_id}' non déployé dans cet Airflow."
+            return r.status_code in (200, 201), r.text
+        except Exception as e:
+            return False, str(e)
+
+    a1, a2, a3, a4 = st.columns(4)
+
+    with a1:
+        if st.button("Recharger le modèle", use_container_width=True):
             try:
                 headers = {"X-API-Key": API_KEY} if API_KEY else {}
                 r = requests.post(f"{API_URL}/reload", headers=headers, timeout=10)
                 if r.status_code == 200:
-                    st.success("Modèle rechargé avec succès.")
+                    st.success("Modèle rechargé.")
                 else:
-                    st.error(f"Erreur ({r.status_code}) : {r.text}")
+                    st.error(f"Erreur {r.status_code}")
             except Exception as e:
-                st.error(f"Erreur : {e}")
+                st.error(str(e))
+
+    with a2:
+        if st.button("Vérification drift", use_container_width=True):
+            ok, msg = _trigger_dag("radiocovid_monitoring")
+            if ok:
+                st.success("DAG lancé.")
+            else:
+                st.error(f"Erreur : {msg[:120]}")
+
+    with a3:
+        if st.button("Lancer réentraînement", use_container_width=True):
+            ok, msg = _trigger_dag("radiocovid_pipeline")
+            if ok:
+                st.success("Réentraînement lancé.")
+            else:
+                st.error(f"Erreur : {msg[:120]}")
+
+    with a4:
+        if st.button("Vider les logs", use_container_width=True, type="secondary"):
+            if PREDICTIONS_FILE.exists():
+                PREDICTIONS_FILE.write_text("")
+                st.cache_data.clear()
+                st.success("Logs vidés.")
+            else:
+                st.info("Aucun log à vider.")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # -----------------------------------------------------------------------
+    # 4. Drift & prédictions
+    # -----------------------------------------------------------------------
+    st.markdown("**Prédictions en production**")
 
     df = load_predictions()
     reference = load_reference()
@@ -580,7 +797,7 @@ elif page == "Monitoring":
     if drift_flag:
         st.markdown(
             '<div class="rc-status-warn">'
-            "<strong>Alerte</strong> : la confiance moyenne a baissé de plus de 5 points "
+            "<strong>Alerte drift</strong> : la confiance moyenne a baissé de plus de 5 points "
             "par rapport au référentiel. Vérifiez la qualité des images entrantes."
             "</div>",
             unsafe_allow_html=True,
