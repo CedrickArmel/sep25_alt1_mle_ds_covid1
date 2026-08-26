@@ -259,7 +259,7 @@ def get_transform():
             transforms.Grayscale(num_output_channels=3),
             transforms.Resize(256),
             transforms.ToTensor(),
-            transforms.Normalize(mean=[0.502, 0.502, 0.502], std=[0.255, 0.255, 0.255]),
+            transforms.Normalize(mean=[128], std=[65]),
         ]
     )
 
