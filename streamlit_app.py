@@ -575,7 +575,28 @@ elif page == "Monitoring":
                     }
         except Exception:
             pass
-        # Fallback: read from /info endpoint
+        # Fallback: fetch metrics directly from the production run in W&B
+        try:
+            import wandb
+
+            entity = os.environ.get("WANDB_ENTITY", "")
+            project = os.environ.get("WANDB_PROJECT", "")
+            run_id = os.environ.get("WANDB_RUN_ID", "")
+            if entity and project and run_id:
+                api2 = wandb.Api()
+                run = api2.run(f"{entity}/{project}/{run_id}")
+                summary = run.summary
+                return {
+                    "version": "production",
+                    "created_at": run.created_at,
+                    "run_id": run.id,
+                    "f1": summary.get("best_val_score", summary.get("val_f1", "—")),
+                    "accuracy": summary.get("val_accuracy", "—"),
+                    "loss": summary.get("val_loss", "—"),
+                }
+        except Exception:
+            pass
+        # Last resort: read from /info endpoint
         try:
             info = requests.get(f"{API_URL}/info", timeout=4).json()
             return {
