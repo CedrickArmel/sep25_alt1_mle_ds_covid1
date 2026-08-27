@@ -48,6 +48,7 @@ ROOT = Path(".")
 INFERENCE_LOG_DIR = Path(os.environ.get("INFERENCE_LOG_DIR", "data/inference_logs"))
 PREDICTIONS_FILE = INFERENCE_LOG_DIR / "predictions.jsonl"
 REFERENCE_FILE = ROOT / "data" / "reference_distribution.json"
+DRIFT_RESULT_FILE = ROOT / "reports" / "drift_result_latest.json"
 
 # ---------------------------------------------------------------------------
 # Auth: credentials stored as sha256 hashes
@@ -274,6 +275,15 @@ def load_reference() -> dict:
         return {}
     try:
         return json.loads(REFERENCE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def load_drift_result() -> dict:
+    if not DRIFT_RESULT_FILE.exists():
+        return {}
+    try:
+        return json.loads(DRIFT_RESULT_FILE.read_text(encoding="utf-8"))
     except Exception:
         return {}
 
@@ -796,6 +806,7 @@ elif page == "Monitoring":
 
     df = load_predictions()
     reference = load_reference()
+    drift_result = load_drift_result()
 
     if df.empty:
         st.warning(
@@ -813,24 +824,47 @@ elif page == "Monitoring":
     n_normal = (df7["label"] == "NORMAL").sum()
     n_abnormal = n_total - n_normal
     ref_conf = reference.get("features", {}).get("confidence", {}).get("mean", avg_conf)
-    drift_flag = avg_conf < ref_conf - 0.05
 
-    if drift_flag:
-        st.markdown(
-            '<div class="rc-status-warn">'
-            "<strong>Alerte drift</strong> : la confiance moyenne a baissé de plus de 5 points "
-            "par rapport au référentiel. Vérifiez la qualité des images entrantes."
-            "</div>",
-            unsafe_allow_html=True,
-        )
+    # Prioritize Evidently result when available, fallback to simple confidence check
+    if drift_result:
+        drift_flag = drift_result.get("drift_detected", False)
+        n_drifted = len(drift_result.get("drifted_features", []))
+        n_features = len(drift_result.get("features", {}))
+        checked_at = drift_result.get("checked_at", "")[:16].replace("T", " ")
+        if drift_flag:
+            st.markdown(
+                '<div class="rc-status-warn">'
+                f"<strong>Alerte drift (Evidently)</strong> : {n_drifted}/{n_features} features "
+                f"ont dérivé significativement (test KS, p&lt;0.05). Dernière analyse : {checked_at} UTC."
+                "</div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                '<div class="rc-status-ok">'
+                f"<strong>Statut nominal (Evidently)</strong> : aucune dérive détectée "
+                f"({n_drifted}/{n_features} features, test KS). Dernière analyse : {checked_at} UTC."
+                "</div>",
+                unsafe_allow_html=True,
+            )
     else:
-        st.markdown(
-            '<div class="rc-status-ok">'
-            "<strong>Statut nominal</strong> : le modèle se comporte de manière stable "
-            "sur les 7 derniers jours."
-            "</div>",
-            unsafe_allow_html=True,
-        )
+        drift_flag = avg_conf < ref_conf - 0.05
+        if drift_flag:
+            st.markdown(
+                '<div class="rc-status-warn">'
+                "<strong>Alerte drift</strong> : la confiance moyenne a baissé de plus de 5 points "
+                "par rapport au référentiel. Vérifiez la qualité des images entrantes."
+                "</div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                '<div class="rc-status-ok">'
+                "<strong>Statut nominal</strong> : le modèle se comporte de manière stable "
+                "sur les 7 derniers jours."
+                "</div>",
+                unsafe_allow_html=True,
+            )
 
     k1, k2, k3, k4 = st.columns(4)
     k1.metric("Prédictions (7 j)", n_total)
@@ -844,6 +878,29 @@ elif page == "Monitoring":
     k4.metric(
         "Anormal", f"{n_abnormal}", f"{n_abnormal/n_total:.0%}" if n_total else ""
     )
+
+    # Evidently per-feature KS results
+    if drift_result and drift_result.get("features"):
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("**Analyse de dérive par feature (Evidently — test KS)**")
+        FEAT_LABELS = {
+            "img_mean": "Luminosité",
+            "img_std": "Contraste",
+            "img_entropy": "Entropie",
+            "confidence": "Confiance",
+        }
+        feat_cols = st.columns(len(drift_result["features"]))
+        for i, (feat, stats) in enumerate(drift_result["features"].items()):
+            label = FEAT_LABELS.get(feat, feat)
+            p_val = stats.get("drift_score", float("nan"))
+            detected = stats.get("drift_detected", False)
+            badge = "🔴 DRIFT" if detected else "🟢 OK"
+            feat_cols[i].metric(
+                label=label,
+                value=badge,
+                delta=f"p = {p_val:.3f}",
+                delta_color="inverse" if detected else "normal",
+            )
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("**Confiance moyenne par jour**")

@@ -250,6 +250,19 @@ def main() -> None:
         )
 
     # ------------------------------------------------------------------
+    # Save JSON result for Streamlit dashboard
+    # ------------------------------------------------------------------
+    result_json_path = args.report_dir / "drift_result_latest.json"
+    result_to_save = {
+        **result,
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+        "report_file": str(report_path),
+    }
+    args.report_dir.mkdir(parents=True, exist_ok=True)
+    result_json_path.write_text(json.dumps(result_to_save, indent=2), encoding="utf-8")
+    log.info("Drift result saved to %s", result_json_path)
+
+    # ------------------------------------------------------------------
     # W&B push (optional)
     # ------------------------------------------------------------------
     if os.environ.get("ENABLE_WANDB_LOGGING", "0") == "1":
